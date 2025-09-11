@@ -1,5 +1,5 @@
 #!/bin/bash
-# CH32V003 Programmer Build Script
+# PewPewCH32 Programmer Build Script
 # Usage: ./build.sh [clean]
 
 set -e  # Exit on any error
@@ -31,7 +31,7 @@ print_error() {
 print_header() {
     echo -e "${GREEN}"
     echo "=============================================================================="
-    echo " CH32V003 Programmer Build Script"
+    echo " PewPewCH32 Programmer Build Script"
     echo "=============================================================================="
     echo -e "${NC}"
 }
@@ -39,7 +39,7 @@ print_header() {
 # Check if we're in the right directory
 check_directory() {
     if [[ ! -f "CMakeLists.txt" ]] || [[ ! -d "src" ]]; then
-        print_error "This script must be run from the CH32V003 programmer root directory"
+        print_error "This script must be run from the PewPewCH32 root directory"
         exit 1
     fi
 }
@@ -142,6 +142,12 @@ fetch_firmware_submodules() {
 init_submodules() {
     print_status "Initializing git submodules..."
     
+    # Check if submodule is already configured in git
+    if ! git config -f .gitmodules --get-regexp 'submodule\.pico-sdk' > /dev/null 2>&1; then
+        print_status "Adding Pico SDK submodule..."
+        git submodule add https://github.com/raspberrypi/pico-sdk.git pico-sdk
+    fi
+    
     if [[ ! -d "pico-sdk/.git" ]]; then
         print_status "Initializing Pico SDK submodule..."
         git submodule update --init --recursive pico-sdk
@@ -149,11 +155,17 @@ init_submodules() {
         print_status "Pico SDK submodule already initialized"
     fi
     
+    # Check if submodule is already configured in git
+    if ! git config -f .gitmodules --get-regexp 'submodule\.firmware/ch32v003fun' > /dev/null 2>&1; then
+        print_status "Adding PewPewCH32 framework submodule..."
+        git submodule add https://github.com/cnlohr/ch32v003fun.git firmware/ch32v003fun
+    fi
+    
     if [[ ! -d "firmware/ch32v003fun/.git" ]]; then
-        print_status "Initializing CH32V003 framework submodule..."
+        print_status "Initializing PewPewCH32 framework submodule..."
         git submodule update --init firmware/ch32v003fun
     else
-        print_status "CH32V003 framework submodule already initialized"
+        print_status "PewPewCH32 framework submodule already initialized"
     fi
     
     # Fetch firmware submodules from firmware.txt
@@ -220,8 +232,8 @@ build_firmware_from_manifest() {
                 # Try to build firmware
                 print_status "Compiling firmware '$name'..."
                 if [[ -f "Makefile" ]]; then
-                    # Use existing Makefile, set CH32V003FUN to our submodule
-                    if CH32V003FUN=../ch32v003fun make > /dev/null 2>&1; then
+                    # Use existing Makefile, set PewPewCH32FUN to our submodule
+                    if PewPewCH32FUN=../ch32v003fun make > /dev/null 2>&1; then
                         if [[ -f "$binary_name" ]]; then
                             local size=$(stat -c%s "$binary_name")
                             print_success "Firmware '$name' built successfully (${size} bytes)"
@@ -298,7 +310,7 @@ configure_build() {
 
 # Build the project
 build_project() {
-    print_status "Building CH32V003 programmer..."
+    print_status "Building PewPewCH32 programmer..."
     
     # Determine number of CPU cores for parallel build
     local num_cores=$(nproc 2>/dev/null || echo "4")
@@ -309,14 +321,14 @@ build_project() {
         print_success "Build completed successfully!"
         
         # Show generated files
-        if [[ -f "ch32v003_programmer.uf2" ]]; then
-            local uf2_size=$(stat -c%s "ch32v003_programmer.uf2")
-            print_success "Generated ch32v003_programmer.uf2 (${uf2_size} bytes)"
+        if [[ -f "PewPewCH32.uf2" ]]; then
+            local uf2_size=$(stat -c%s "PewPewCH32.uf2")
+            print_success "Generated PewPewCH32.uf2 (${uf2_size} bytes)"
         fi
         
-        if [[ -f "ch32v003_programmer.elf" ]]; then
-            local elf_size=$(stat -c%s "ch32v003_programmer.elf")
-            print_success "Generated ch32v003_programmer.elf (${elf_size} bytes)"
+        if [[ -f "PewPewCH32.elf" ]]; then
+            local elf_size=$(stat -c%s "PewPewCH32.elf")
+            print_success "Generated PewPewCH32.elf (${elf_size} bytes)"
         fi
     else
         print_error "Build failed"
@@ -333,10 +345,10 @@ show_usage() {
     echo
     echo "1. Flash to Raspberry Pi Pico:"
     echo "   - Hold BOOTSEL button while connecting Pico to USB"
-    echo "   - Copy build/ch32v003_programmer.uf2 to the RPI-RP2 drive"
+    echo "   - Copy build/PewPewCH32.uf2 to the RPI-RP2 drive"
     echo
     echo "2. Hardware connections:"
-    echo "   - CH32V003 SDI pin → Pico GPIO9"
+    echo "   - PewPewCH32 SDI pin → Pico GPIO9"
     echo "   - Common ground connection"
     echo
     echo "3. Monitor via USB serial (115200 baud):"
@@ -441,7 +453,7 @@ EOF
         print_status "Repository is now ready for git commit"
         exit 0
     elif [[ "$1" == "--help" ]] || [[ "$1" == "-h" ]]; then
-        echo "CH32V003 Programmer Build Script"
+        echo "PewPewCH32 Programmer Build Script"
         echo
         echo "Usage: $0 [OPTIONS]"
         echo
@@ -452,9 +464,9 @@ EOF
         echo
         echo "This script will:"
         echo "  1. Check for required dependencies"
-        echo "  2. Initialize git submodules (Pico SDK, CH32V003 framework)"
+        echo "  2. Initialize git submodules (Pico SDK, PewPewCH32 framework)"
         echo "  3. Build example firmware (if RISC-V toolchain available)"
-        echo "  4. Configure and build the CH32V003 programmer"
+        echo "  4. Configure and build the PewPewCH32 programmer"
         echo "  5. Generate .uf2 file ready for flashing to Pico"
         echo
         echo "Requirements:"
