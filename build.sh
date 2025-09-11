@@ -232,8 +232,8 @@ build_firmware_from_manifest() {
                 # Try to build firmware
                 print_status "Compiling firmware '$name'..."
                 if [[ -f "Makefile" ]]; then
-                    # Use existing Makefile, set PewPewCH32FUN to our submodule
-                    if PewPewCH32FUN=../ch32v003fun make > /dev/null 2>&1; then
+                    # Use existing Makefile, set CH32V003FUN to our submodule
+                    if CH32V003FUN=../ch32v003fun make > /dev/null 2>&1; then
                         if [[ -f "$binary_name" ]]; then
                             local size=$(stat -c%s "$binary_name")
                             print_success "Firmware '$name' built successfully (${size} bytes)"
