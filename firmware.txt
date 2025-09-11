@@ -1,0 +1,17 @@
+# CH32V003 Firmware Manifest
+# Format: NAME SOURCE_DIR BINARY_NAME [GIT_URL [GIT_BRANCH]]
+#
+# NAME:        Firmware identifier (used in code)
+# SOURCE_DIR:  Directory path relative to firmware/
+# BINARY_NAME: Name of the compiled binary file
+# GIT_URL:     Optional git submodule URL
+# GIT_BRANCH:  Optional branch/tag (defaults to main/master)
+#
+# Lines starting with # are comments
+# Empty lines are ignored
+
+# Built-in example firmware
+blink examples/blink blink.bin
+
+# External firmware submodules
+watchdog emonio-wd watchdog.bin https://github.com/everslick/emonio-wd.git
