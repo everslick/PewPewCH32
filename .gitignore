@@ -1,0 +1,8 @@
+.claude/
+build/
+**.bin
+**.elf
+**.hex
+**.lst
+**.map
+
