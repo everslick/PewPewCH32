@@ -1,4 +1,4 @@
-# CH32V003 Programmer
+# PewPewCH32 Programmer
 
 A standalone CH32V003 microcontroller programmer using Raspberry Pi Pico, based on PicoRVD.
 
@@ -44,8 +44,8 @@ A standalone CH32V003 microcontroller programmer using Raspberry Pi Pico, based 
 
 1. **Clone and build** (one command does everything):
    ```bash
-   git clone https://github.com/your-repo/ch32v003-programmer.git
-   cd ch32v003-programmer
+   git clone https://github.com/your-repo/PewPewCH32.git
+   cd PewPewCH32
    ./build.sh
    ```
 
@@ -95,7 +95,7 @@ The programmer uses a **firmware manifest system** defined in `firmware.txt` at 
 blink examples/blink blink.bin
 
 # External firmware submodules
-watchdog emonio-wd watchdog.bin https://github.com/everslick/emonio-wd.git
+ext-fw fw fw.bin https://github.com/user/fw.git
 ```
 
 **Fields:**
@@ -115,7 +115,7 @@ watchdog emonio-wd watchdog.bin https://github.com/everslick/emonio-wd.git
 
 ### 1. Flash to Pico
 - Hold BOOTSEL button while connecting Pico to USB
-- Copy `build/ch32v003_programmer.uf2` to the RPI-RP2 drive
+- Copy `build/PewPewCH32.uf2` to the RPI-RP2 drive
 
 ### 2. Connect CH32V003 Target
 - CH32V003 SDI pin → Pico GPIO9
@@ -173,7 +173,7 @@ CH32V003_Programmer_Clean/
 │   └── emonio-wd/            # External firmware (submodule)
 ├── pico-sdk/                 # Raspberry Pi Pico SDK (submodule)
 └── build/                    # Generated build files
-    ├── ch32v003_programmer.uf2
+    ├── PewPewCH32.uf2
     └── src/firmware_*.c      # Generated firmware arrays
 ```
 
@@ -196,3 +196,7 @@ The build system uses:
 ## Based On
 
 This project uses source code from [PicoRVD](https://github.com/aappleby/PicoRVD) by Adam Appleby.
+
+## License
+
+MIT
