@@ -6,5 +6,10 @@ build/
 **.lst
 **.map
 
-firmware/*
+# User-specific firmware configuration
 firmware.txt
+
+# Ignore firmware directory contents except the manifest
+firmware/*
+!firmware/manifest.cmake
+!firmware/examples/
