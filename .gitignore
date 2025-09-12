@@ -6,3 +6,6 @@ build/
 **.lst
 **.map
 
+# External firmware repositories (cloned, not submodules)
+firmware/emonio-wd/
+

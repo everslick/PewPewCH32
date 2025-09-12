@@ -51,8 +51,8 @@ A standalone CH32V003 microcontroller programmer using Raspberry Pi Pico, based 
 
 The build script automatically:
 - Checks for all required dependencies
-- Initializes git submodules (Pico SDK, PewPewCH32Fun)
-- Fetches firmware submodules from `firmware.txt`
+- Initializes git submodules (Pico SDK, ch32v003fun)
+- Clones external firmware repositories from `firmware.txt`
 - Builds all firmware (if RISC-V toolchain available)
 - Configures and builds the programmer
 - Generates the `.uf2` file ready for flashing
@@ -94,7 +94,7 @@ The programmer uses a **firmware manifest system** defined in `firmware.txt` at 
 # Built-in example firmware
 blink examples/blink blink.bin
 
-# External firmware submodules
+# External firmware repositories (cloned, not submodules)
 ext-fw fw fw.bin https://github.com/user/fw.git
 ```
 
@@ -102,14 +102,16 @@ ext-fw fw fw.bin https://github.com/user/fw.git
 - `NAME`: Firmware identifier used in code
 - `SOURCE_DIR`: Directory path relative to `firmware/`
 - `BINARY_NAME`: Name of the compiled binary file
-- `GIT_URL`: Optional git submodule URL (auto-fetched during build)
+- `GIT_URL`: Optional git repository URL (cloned during build, not tracked by git)
 - `GIT_BRANCH`: Optional branch/tag (defaults to main/master)
 
 ### Adding New Firmware
 
 1. Add entry to `firmware.txt` with git URL
-2. Run `./build.sh` - submodule is fetched and built automatically
+2. Run `./build.sh` - repository is cloned and built automatically
 3. Firmware is embedded and selectable via BOOTSEL button
+
+**Note:** External firmware repositories are cloned but not tracked as git submodules. They are listed in `.gitignore` to keep the main repository clean.
 
 ## Flashing and Usage
 
@@ -144,7 +146,7 @@ minicom -D /dev/ttyACM0 -b 115200
 
 The programmer currently includes:
 
-**blink** - Simple LED blink example (616 bytes)
+- **blink** - Simple LED blink example (built-in)
 
 Additional firmware can be added by editing `firmware.txt` and running `./build.sh`.
 
@@ -169,7 +171,7 @@ PewPewCH32/
 │   ├── examples/             # Built-in example firmware
 │   │   └── blink/
 │   ├── ch32v003fun/          # CH32V003 SDK (submodule)
-│   └── ext-fw/               # External firmware (submodule)
+│   └── ext-fw/               # Example external firmware (cloned, not tracked)
 ├── pico-sdk/                 # Raspberry Pi Pico SDK (submodule)
 └── build/                    # Generated build files
     ├── PewPewCH32.uf2
@@ -181,7 +183,7 @@ PewPewCH32/
 ### Adding Custom Firmware
 
 1. **Local firmware**: Place in `firmware/examples/your-firmware/`
-2. **External firmware**: Add git URL to `firmware.txt`
+2. **External firmware**: Add git URL to `firmware.txt` (will be cloned but not tracked)
 3. **Build requirements**: Must output `.bin` file and use ch32v003fun framework
 
 ### Build System Details
@@ -190,7 +192,8 @@ The build system uses:
 - **CMake** for main project configuration
 - **Custom manifest system** (`firmware/manifest.cmake`) for firmware integration
 - **xxd** for binary-to-C-array conversion
-- **Git submodules** for dependency management
+- **Git submodules** for build dependencies (Pico SDK, ch32v003fun)
+- **Git clone** for external firmware (not tracked as submodules)
 
 ## Based On
 

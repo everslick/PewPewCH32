@@ -90,10 +90,10 @@ check_dependencies() {
     print_success "All required dependencies found"
 }
 
-# Fetch firmware submodules from firmware.txt
-fetch_firmware_submodules() {
+# Clone firmware repositories from firmware.txt (not as submodules)
+clone_firmware_repos() {
     if [[ -f "firmware.txt" ]]; then
-        print_status "Processing firmware.txt for submodules..."
+        print_status "Processing firmware.txt for firmware repositories..."
         
         # Read firmware.txt line by line
         while IFS= read -r line || [[ -n "$line" ]]; do
@@ -106,35 +106,45 @@ fetch_firmware_submodules() {
             read -r name source_dir binary_name git_url git_branch <<< "$line"
             
             if [[ -n "$git_url" ]]; then
-                local submodule_path="firmware/$source_dir"
+                local firmware_path="firmware/$source_dir"
                 
-                # Check if submodule already exists and is checked out
-                if [[ -d "$submodule_path/.git" ]] || [[ -f "$submodule_path/.git" ]]; then
-                    print_status "Firmware submodule '$name' already initialized"
-                elif git submodule status "$submodule_path" &>/dev/null; then
-                    # Submodule exists in git but not checked out
-                    print_status "Updating existing firmware submodule '$name'"
-                    git submodule update --init "$submodule_path"
-                    print_success "Firmware submodule '$name' updated successfully"
-                else
-                    print_status "Adding firmware submodule '$name' from $git_url"
-                    
-                    # Add git submodule (with --force to handle cached directories)
+                # Check if directory already exists
+                if [[ -d "$firmware_path/.git" ]]; then
+                    print_status "Firmware repository '$name' already cloned"
+                    # Pull latest changes
+                    print_status "Updating firmware repository '$name'..."
+                    cd "$firmware_path"
                     if [[ -n "$git_branch" ]]; then
-                        git submodule add --force -b "$git_branch" "$git_url" "$submodule_path"
-                    else
-                        git submodule add --force "$git_url" "$submodule_path"
+                        git checkout "$git_branch" > /dev/null 2>&1
+                    fi
+                    git pull > /dev/null 2>&1
+                    cd - > /dev/null
+                    print_success "Firmware repository '$name' updated"
+                else
+                    print_status "Cloning firmware repository '$name' from $git_url"
+                    
+                    # Remove directory if it exists but isn't a git repo
+                    if [[ -d "$firmware_path" ]]; then
+                        rm -rf "$firmware_path"
                     fi
                     
-                    # Initialize the submodule
-                    git submodule update --init "$submodule_path"
+                    # Clone the repository
+                    if [[ -n "$git_branch" ]]; then
+                        git clone -b "$git_branch" "$git_url" "$firmware_path" > /dev/null 2>&1
+                    else
+                        git clone "$git_url" "$firmware_path" > /dev/null 2>&1
+                    fi
                     
-                    print_success "Firmware submodule '$name' added successfully"
+                    if [[ -d "$firmware_path/.git" ]]; then
+                        print_success "Firmware repository '$name' cloned successfully"
+                    else
+                        print_warning "Failed to clone firmware repository '$name'"
+                    fi
                 fi
             fi
         done < "firmware.txt"
     else
-        print_warning "firmware.txt not found - skipping firmware submodule setup"
+        print_warning "firmware.txt not found - skipping firmware repository setup"
     fi
 }
 
@@ -168,8 +178,8 @@ init_submodules() {
         print_status "PewPewCH32 framework submodule already initialized"
     fi
     
-    # Fetch firmware submodules from firmware.txt
-    fetch_firmware_submodules
+    # Clone firmware repositories from firmware.txt (not as submodules)
+    clone_firmware_repos
     
     print_success "Git submodules initialized"
 }
