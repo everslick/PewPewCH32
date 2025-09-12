@@ -13,5 +13,5 @@
 # Built-in example firmware
 blink examples/blink blink.bin
 
-# External firmware submodules
-watchdog emonio-wd watchdog.bin https://github.com/everslick/emonio-wd.git
+# External firmware
+#ext-fw example example.bin https://github.com/user/example.git

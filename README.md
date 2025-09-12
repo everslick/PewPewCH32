@@ -51,7 +51,7 @@ A standalone CH32V003 microcontroller programmer using Raspberry Pi Pico, based 
 
 The build script automatically:
 - Checks for all required dependencies
-- Initializes git submodules (Pico SDK, CH32V003Fun)
+- Initializes git submodules (Pico SDK, PewPewCH32Fun)
 - Fetches firmware submodules from `firmware.txt`
 - Builds all firmware (if RISC-V toolchain available)
 - Configures and builds the programmer
@@ -144,15 +144,14 @@ minicom -D /dev/ttyACM0 -b 115200
 
 The programmer currently includes:
 
-1. **blink** - Simple LED blink example (616 bytes)
-2. **watchdog** - I2C watchdog firmware from emonio-wd project (1952 bytes)
+**blink** - Simple LED blink example (616 bytes)
 
 Additional firmware can be added by editing `firmware.txt` and running `./build.sh`.
 
 ## Project Structure
 
 ```
-CH32V003_Programmer_Clean/
+PewPewCH32/
 ├── firmware.txt              # Firmware manifest (defines available firmware)
 ├── build.sh                  # Automated build script
 ├── CMakeLists.txt            # Main CMake configuration
@@ -170,7 +169,7 @@ CH32V003_Programmer_Clean/
 │   ├── examples/             # Built-in example firmware
 │   │   └── blink/
 │   ├── ch32v003fun/          # CH32V003 SDK (submodule)
-│   └── emonio-wd/            # External firmware (submodule)
+│   └── ext-fw/               # External firmware (submodule)
 ├── pico-sdk/                 # Raspberry Pi Pico SDK (submodule)
 └── build/                    # Generated build files
     ├── PewPewCH32.uf2
