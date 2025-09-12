@@ -2,6 +2,30 @@
 
 A standalone CH32V003 microcontroller programmer using Raspberry Pi Pico, based on PicoRVD.
 
+## Purpose & Target Audience
+
+PewPewCH32 is designed for developers and manufacturers who need to:
+
+- **Rapidly program CH32V003 microcontrollers** with different firmware versions
+- **Switch between multiple firmware images** without reflashing the programmer
+- **Create standalone programming stations** for production environments
+- **Distribute programmers to third parties** for field updates or mass production
+
+### Key Benefits
+
+- **Multi-firmware storage**: Store up to 100+ firmware images (RP2040's 2MB flash can hold ~128 max-size CH32V003 firmwares)
+- **No PC required**: Once configured, works as a standalone programmer
+- **Production-ready**: Give pre-loaded programmers to assembly houses or field technicians
+- **Instant switching**: Select different firmware via button press - no reflashing needed
+- **Visual feedback**: RGB LED and optional buzzer for clear programming status
+
+### Ideal For
+
+- **Product Development**: Test different firmware versions quickly
+- **Manufacturing**: Program devices in production with verified firmware
+- **Field Service**: Update deployed devices with multiple firmware options
+- **Education**: Teaching environments where students program CH32V003 projects
+
 ## Hardware Requirements
 
 - **Raspberry Pi Pico** (or compatible RP2040 board)
