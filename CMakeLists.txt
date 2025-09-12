@@ -8,6 +8,9 @@ set(CMAKE_ASM_COMPILER arm-none-eabi-gcc)
 # Set PICO_SDK_PATH to local submodule
 set(PICO_SDK_PATH ${CMAKE_CURRENT_LIST_DIR}/pico-sdk)
 
+# Set board type to enable WS2812 support
+set(PICO_BOARD waveshare_rp2040_zero)
+
 # Include Pico SDK
 include(pico_sdk_import.cmake)
 
@@ -38,6 +41,7 @@ target_include_directories(PewPewCH32 PRIVATE
 
 # Generate PIO headers
 pico_generate_pio_header(PewPewCH32 ${CMAKE_CURRENT_LIST_DIR}/src/singlewire.pio)
+pico_generate_pio_header(PewPewCH32 ${CMAKE_CURRENT_LIST_DIR}/src/ws2812.pio)
 
 # Link libraries
 target_link_libraries(PewPewCH32

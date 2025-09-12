@@ -6,4 +6,5 @@ build/
 **.lst
 **.map
 
+firmware/*
 firmware.txt

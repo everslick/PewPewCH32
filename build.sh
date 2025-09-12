@@ -348,6 +348,50 @@ build_project() {
     fi
 }
 
+# Install firmware to Pico in BOOTSEL mode
+install_firmware() {
+    local mount_path="/media/$USER/RPI-RP2"
+    local uf2_file="build/PewPewCH32.uf2"
+    
+    print_status "Looking for Raspberry Pi Pico in BOOTSEL mode..."
+    
+    # Check if UF2 file exists
+    if [[ ! -f "$uf2_file" ]]; then
+        print_error "PewPewCH32.uf2 not found. Please build the project first."
+        print_status "Run: $0 (without arguments) to build"
+        return 1
+    fi
+    
+    # Check if Pico is mounted
+    if [[ ! -d "$mount_path" ]]; then
+        print_error "Pico not found at $mount_path"
+        print_status "Please:"
+        echo "  1. Hold BOOTSEL button on your Pico"
+        echo "  2. Connect Pico to USB while holding BOOTSEL"
+        echo "  3. Wait for RPI-RP2 drive to appear"
+        echo "  4. Run '$0 install' again"
+        return 1
+    fi
+    
+    # Check if it's actually a Pico (look for INFO_UF2.TXT)
+    if [[ ! -f "$mount_path/INFO_UF2.TXT" ]]; then
+        print_error "$mount_path doesn't appear to be a Pico in BOOTSEL mode"
+        return 1
+    fi
+    
+    # Copy the UF2 file
+    print_status "Installing PewPewCH32 firmware to Pico..."
+    if cp "$uf2_file" "$mount_path/"; then
+        print_success "Firmware installed successfully!"
+        print_status "The Pico will reboot automatically"
+        print_status "Monitor via: screen /dev/ttyACM0 115200"
+        return 0
+    else
+        print_error "Failed to copy firmware to Pico"
+        return 1
+    fi
+}
+
 # Show usage instructions
 show_usage() {
     echo
@@ -462,6 +506,20 @@ EOF
         print_success "Distribution clean completed!"
         print_status "Repository is now ready for git commit"
         exit 0
+    elif [[ "$1" == "install" ]]; then
+        # Install firmware to Pico
+        if [[ ! -f "build/PewPewCH32.uf2" ]]; then
+            print_error "No firmware found to install"
+            print_status "Building project first..."
+            check_directory
+            check_dependencies
+            init_submodules
+            build_firmware
+            configure_build
+            build_project
+        fi
+        install_firmware
+        exit $?
     elif [[ "$1" == "--help" ]] || [[ "$1" == "-h" ]]; then
         echo "PewPewCH32 Programmer Build Script"
         echo
@@ -470,6 +528,7 @@ EOF
         echo "OPTIONS:"
         echo "  clean      Clean previous build before building"
         echo "  distclean  Remove all generated files for git commit"
+        echo "  install    Copy firmware to Pico in BOOTSEL mode"
         echo "  -h, --help Show this help message"
         echo
         echo "This script will:"
@@ -487,7 +546,7 @@ EOF
         exit 0
     elif [[ -n "$1" ]]; then
         print_error "Unknown option: $1"
-        echo "Usage: $0 [clean|distclean]"
+        echo "Usage: $0 [clean|distclean|install]"
         echo "Use $0 --help for more information"
         exit 1
     fi

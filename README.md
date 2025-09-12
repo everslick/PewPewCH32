@@ -39,20 +39,22 @@ PewPewCH32 is designed for developers and manufacturers who need to:
 | GPIO16   | WS2812   | RGB LED status indicator (onboard on Waveshare Pico Zero) |
 | GPIO0    | Buzzer   | PWM buzzer output (optional) |
 | GPIO1    | Trigger  | Programming trigger button (active low, optional) |
-| GPIO27   | LED_G    | Green status LED (optional) |
-| GPIO28   | LED_Y    | Yellow status LED (optional) |
-| GPIO29   | LED_R    | Red status LED (optional) |
+
+**Note:** GPIO27-29 status LEDs removed - all visual feedback now through WS2812 RGB LED.
 
 ## Features
 
 - **Single-wire debug interface** for CH32V003 programming
 - **WS2812 RGB LED** status indication:
-  - Green heartbeat flash (system ready)
-  - Blue firmware selection indication
+  - Rainbow animation on startup (3 seconds)
+  - Green heartbeat flash every 3 seconds (system ready)
+  - Blue flashes for firmware selection (100ms per flash)
+  - Red LED for error states (2 seconds)
 - **Firmware selection** via BOOTSEL button
 - **USB serial console** for monitoring and control
 - **Multiple firmware support** with automatic builds
 - **Firmware manifest system** for easy firmware management
+- **PIO-based WS2812 control** on PIO1 (isolated from programmer on PIO0)
 
 ## Building
 
@@ -103,6 +105,7 @@ sudo apt install cmake build-essential git xxd gcc-arm-none-eabi gcc-riscv64-unk
 ./build.sh              # Normal build
 ./build.sh clean        # Clean build (remove build artifacts first)
 ./build.sh distclean    # Remove all generated files for git commit
+./build.sh install      # Build (if needed) and install to Pico in BOOTSEL mode
 ```
 
 ## Firmware Management
@@ -140,6 +143,14 @@ ext-fw fw fw.bin https://github.com/user/fw.git
 ## Flashing and Usage
 
 ### 1. Flash to Pico
+
+**Option A: Automatic install (Linux)**
+```bash
+# Put Pico in BOOTSEL mode (hold button while connecting USB)
+./build.sh install
+```
+
+**Option B: Manual copy**
 - Hold BOOTSEL button while connecting Pico to USB
 - Copy `build/PewPewCH32.uf2` to the RPI-RP2 drive
 
@@ -155,16 +166,23 @@ minicom -D /dev/ttyACM0 -b 115200
 ```
 
 ### 4. Programming
-- Press BOOTSEL button to cycle through firmware
+
+**BOOTSEL Button Controls:**
+- **Short press (<250ms)**: Program the currently selected firmware to CH32V003
+- **Long press (≥750ms)**: Cycle through available firmware images
 - WS2812 LED shows selected firmware (N+1 blue flashes for index N)
-- Trigger programming via console commands or external trigger
+
+**Alternative triggers:**
+- External trigger button on GPIO1 (optional)
+- Console commands via USB serial
 
 ## Status Indicators
 
-- **Green heartbeat**: System operational, waiting for commands
-- **Blue flashes**: Firmware selection (count = firmware index + 1)
-- **Red**: Error state
-- **Yellow**: Programming in progress
+**WS2812 RGB LED:**
+- **Rainbow fade**: Startup animation (3 seconds)
+- **Green pulse**: System ready (100ms flash every 3 seconds, brightness 32/255)
+- **Blue flashes**: Firmware selection (100ms flashes, count = firmware index + 1)
+- **Red solid**: Error state (2 seconds)
 
 ## Available Firmware
 
