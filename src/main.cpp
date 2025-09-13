@@ -85,6 +85,7 @@ struct led_state_t {
 static struct led_state_t heartbeat_led = {0, false, false, 0, 0, 100};
 static struct led_state_t firmware_led = {0, false, false, 0, 0, 100};
 static struct led_state_t error_led = {0, false, false, 0, 0, 0};
+static struct led_state_t programming_led = {0, false, false, 0, 0, 100};
 
 void delay_us(int us) {
     auto now = time_us_32();
@@ -316,6 +317,7 @@ void update_ws2812() {
                 heartbeat_led.flash_on = true;
                 heartbeat_led.timer = now;
                 ws2812_set_color(0, 32, 0);   // Green heartbeat (brightness 32)
+                gpio_put(PIN_LED_GREEN, false);  // Turn on green GPIO LED (active low)
             }
             // Turn off heartbeat after 100ms
             if (heartbeat_led.active && heartbeat_led.flash_on && (now - heartbeat_led.timer) >= 100) {
@@ -323,6 +325,7 @@ void update_ws2812() {
                 heartbeat_led.active = false;
                 heartbeat_led.timer = now; // Reset for next heartbeat period
                 ws2812_off();
+                gpio_put(PIN_LED_GREEN, true);  // Turn off green GPIO LED (active low)
             }
             break;
             
@@ -331,16 +334,25 @@ void update_ws2812() {
             break;
             
         case STATE_CHECKING_TARGET:
+            // Keep WS2812 off during target checking
+            ws2812_off();
+            break;
+            
         case STATE_PROGRAMMING:
+            // RGB LED is controlled by update_programming_led() during programming
+            // Don't interfere with it here
+            break;
+            
         case STATE_SUCCESS:
-            // Keep WS2812 off during these states
+            // Keep WS2812 off during success state
             ws2812_off();
             break;
             
         case STATE_ERROR:
             // Show red LED for error state - set once when entering state
             if (!error_led.active) {
-                ws2812_set_color(255, 0, 0);  // Bright red error indication
+                ws2812_set_color(255, 0, 0);  // Bright red error indication on RGB
+                gpio_put(PIN_LED_RED, false);  // Turn on red GPIO LED (active low)
                 error_led.active = true;
                 error_led.timer = now;
             }
@@ -350,6 +362,7 @@ void update_ws2812() {
                 current_state = STATE_IDLE;
                 heartbeat_led.timer = 0; // Reset heartbeat timer for clean idle state
                 error_led.active = false; // Reset error LED state
+                gpio_put(PIN_LED_RED, true);  // Turn off red GPIO LED (active low)
                 ws2812_off();
             }
             break;
@@ -388,6 +401,38 @@ void set_all_leds(bool state) {
     gpio_put(PIN_LED_GREEN, led_level);
     gpio_put(PIN_LED_YELLOW, led_level);
     gpio_put(PIN_LED_RED, led_level);
+}
+
+void start_programming_led() {
+    programming_led.active = true;
+    programming_led.timer = to_ms_since_boot(get_absolute_time());
+    programming_led.flash_on = false;
+    programming_led.flash_duration_ms = 100; // 100ms on, 100ms off = 200ms period, 50% duty
+}
+
+void stop_programming_led() {
+    programming_led.active = false;
+    gpio_put(PIN_LED_YELLOW, true); // Turn off (active low)
+    ws2812_off(); // Also turn off RGB LED
+}
+
+void update_programming_led() {
+    if (!programming_led.active) return;
+    
+    uint32_t now = to_ms_since_boot(get_absolute_time());
+    if ((now - programming_led.timer) >= programming_led.flash_duration_ms) {
+        programming_led.flash_on = !programming_led.flash_on;
+        gpio_put(PIN_LED_YELLOW, !programming_led.flash_on); // Active low logic
+        
+        // Also control RGB LED - bright yellow when on
+        if (programming_led.flash_on) {
+            ws2812_set_color(LED_BRIGHTNESS, LED_BRIGHTNESS, 0); // Yellow (R+G)
+        } else {
+            ws2812_off();
+        }
+        
+        programming_led.timer = now;
+    }
 }
 
 // update_leds() removed - all LED control now through WS2812
@@ -463,6 +508,7 @@ void process_state_machine(RVDebug* rvd, WCHFlash* flash) {
                 printf_g("// Target detected - starting programming...\n");
                 current_state = STATE_PROGRAMMING;
                 state_timer = now;
+                start_programming_led(); // Start blinking yellow LED
                 buzzer_beep(BUZZER_FREQ_START, BUZZER_DURATION_MS);
             } else {
                 printf_g("// ERROR: No CH32V003 target detected.\n");
@@ -507,10 +553,12 @@ void process_state_machine(RVDebug* rvd, WCHFlash* flash) {
                 if (success) {
                     printf_g("// Programming SUCCESSFUL!\n");
                     current_state = STATE_SUCCESS;
+                    stop_programming_led(); // Stop blinking yellow LED
                     buzzer_beep(BUZZER_FREQ_SUCCESS, BUZZER_DURATION_MS);
                 } else {
                     printf_g("// Programming FAILED!\n");
                     current_state = STATE_ERROR;
+                    stop_programming_led(); // Stop blinking yellow LED
                     buzzer_beep(BUZZER_FREQ_FAILURE, BUZZER_DURATION_MS);
                 }
                 state_timer = now;
@@ -669,6 +717,9 @@ int main() {
         // Update WS2812 RGB LED
         update_ws2812();
         
+        // Update programming LED (yellow LED blinking during programming)
+        update_programming_led();
+        
         // Process state machine
         process_state_machine(rvd, flash);
         
@@ -713,6 +764,7 @@ int main() {
                         printf_g("// Target detected via timeout function!\n");
                         current_state = STATE_PROGRAMMING;
                         state_timer = to_ms_since_boot(get_absolute_time());
+                        start_programming_led(); // Start blinking yellow LED
                     }
                 }
             }
@@ -778,16 +830,17 @@ int main() {
                 printf_g("// Programming SUCCESSFUL!\n");
                 current_state = STATE_SUCCESS;
                 state_timer = to_ms_since_boot(get_absolute_time());
+                stop_programming_led(); // Stop blinking yellow LED
                 // Success buzzer tone
                 buzzer_beep(BUZZER_FREQ_SUCCESS, BUZZER_DURATION_MS);
             } else {
                 printf_g("// Programming FAILED!\n");
+                stop_programming_led(); // Stop blinking yellow LED
                 // Failure buzzer tone
                 buzzer_beep(BUZZER_FREQ_FAILURE, BUZZER_DURATION_MS);
-                // Red LED on for error
-                gpio_put(PIN_LED_RED, false);  // Active low - ON
-                sleep_ms(LED_SUCCESS_DURATION_MS);
-                gpio_put(PIN_LED_RED, true);   // Off
+                // Red LED is now handled by STATE_ERROR in update_ws2812()
+                current_state = STATE_ERROR;
+                state_timer = to_ms_since_boot(get_absolute_time());
             }
             
             printf_g("// Flash sequence complete. Waiting for next trigger...\n");
