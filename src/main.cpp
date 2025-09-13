@@ -29,7 +29,7 @@
 const int ch32v003_flash_size = 16*1024;
 const char* PROGRAMMER_VERSION = "1.0.0";
 
-// Fallback firmware if no firmware submodules are available
+// Fallback firmware if no external firmware repositories are available
 const uint8_t fallback_firmware[] = {
     // Minimal valid RISC-V reset vector
     0x37, 0x01, 0x00, 0x08,  // lui sp, 0x80000

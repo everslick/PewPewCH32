@@ -5,7 +5,7 @@ set(CMAKE_C_COMPILER arm-none-eabi-gcc)
 set(CMAKE_CXX_COMPILER arm-none-eabi-g++)
 set(CMAKE_ASM_COMPILER arm-none-eabi-gcc)
 
-# Set PICO_SDK_PATH to local submodule
+# Set PICO_SDK_PATH to local clone
 set(PICO_SDK_PATH ${CMAKE_CURRENT_LIST_DIR}/pico-sdk)
 
 # Set board type to enable WS2812 support
@@ -25,7 +25,7 @@ pico_sdk_init()
 # Add main executable
 add_executable(PewPewCH32
     src/main.cpp
-    # Use picorvd sources from submodule (excluding their main.cpp)
+    # Use picorvd sources from clone (excluding their main.cpp)
     picorvd/src/Console.cpp
     picorvd/src/GDBServer.cpp
     picorvd/src/Packet.cpp

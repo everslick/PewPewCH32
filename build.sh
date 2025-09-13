@@ -65,7 +65,7 @@ check_dependencies() {
         missing_deps+=("make (build tool)")
     fi
     
-    # Check for git (needed for submodules)
+    # Check for git (needed for cloning dependencies)
     if ! command -v git &> /dev/null; then
         missing_deps+=("git (version control)")
     fi
@@ -90,7 +90,7 @@ check_dependencies() {
     print_success "All required build dependencies found"
 }
 
-# Clone firmware repositories from firmware.txt (not as submodules)
+# Clone firmware repositories from firmware.txt
 clone_firmware_repos() {
     if [[ -f "firmware.txt" ]]; then
         print_status "Processing firmware.txt for firmware repositories..."
@@ -167,63 +167,36 @@ apply_picorvd_patches() {
             print_status "Disabled conflicting tusb_config.h"
         fi
         
-        # Configure git to ignore changes in picorvd submodule
-        if ! git config submodule.picorvd.ignore >/dev/null 2>&1; then
-            git config submodule.picorvd.ignore all
-            print_status "Configured git to ignore changes in picorvd submodule"
-        fi
     fi
 }
 
-# Initialize git submodules
-init_submodules() {
-    print_status "Initializing git submodules..."
+# Initialize dependencies
+init_dependencies() {
+    print_status "Initializing build dependencies..."
     
-    # Check if submodule is already configured in git
-    if ! git config -f .gitmodules --get-regexp 'submodule\.pico-sdk' > /dev/null 2>&1; then
-        print_status "Adding Pico SDK submodule..."
-        git submodule add https://github.com/raspberrypi/pico-sdk.git pico-sdk
+    # Clone required repositories if missing
+    if [[ ! -d "pico-sdk" ]]; then
+        print_status "Cloning Pico SDK..."
+        git clone --recursive https://github.com/raspberrypi/pico-sdk.git pico-sdk
     fi
     
-    if [[ ! -d "pico-sdk/.git" ]]; then
-        print_status "Initializing Pico SDK submodule..."
-        git submodule update --init --recursive pico-sdk
-    else
-        print_status "Pico SDK submodule already initialized"
+    if [[ ! -d "firmware/ch32v003fun" ]]; then
+        print_status "Cloning CH32V003 framework..."
+        git clone https://github.com/cnlohr/ch32v003fun.git firmware/ch32v003fun
     fi
     
-    # Check if submodule is already configured in git
-    if ! git config -f .gitmodules --get-regexp 'submodule\.firmware/ch32v003fun' > /dev/null 2>&1; then
-        print_status "Adding PewPewCH32 framework submodule..."
-        git submodule add https://github.com/cnlohr/ch32v003fun.git firmware/ch32v003fun
-    fi
-    
-    if [[ ! -d "firmware/ch32v003fun/.git" ]]; then
-        print_status "Initializing PewPewCH32 framework submodule..."
-        git submodule update --init firmware/ch32v003fun
-    else
-        print_status "PewPewCH32 framework submodule already initialized"
-    fi
-    
-    # Check if picorvd submodule is already configured in git
-    if ! git config -f .gitmodules --get-regexp 'submodule\.picorvd' > /dev/null 2>&1; then
-        print_status "Adding picorvd submodule..."
-        git submodule add https://github.com/aappleby/picorvd.git picorvd
-    fi
-    
-    if [[ ! -d "picorvd/.git" ]]; then
-        print_status "Initializing picorvd submodule..."
-        git submodule update --init picorvd
+    if [[ ! -d "picorvd" ]]; then
+        print_status "Cloning picorvd..."
+        git clone https://github.com/aappleby/picorvd.git picorvd
         apply_picorvd_patches
     else
-        print_status "picorvd submodule already initialized"
         apply_picorvd_patches
     fi
     
-    # Clone firmware repositories from firmware.txt (not as submodules)
+    # Clone firmware repositories from firmware.txt
     clone_firmware_repos
     
-    print_success "Git submodules initialized"
+    print_success "Build dependencies initialized"
 }
 
 # Check for optional RISC-V toolchain
@@ -284,7 +257,7 @@ build_firmware_from_manifest() {
                 # Try to build firmware
                 print_status "Compiling firmware '$name'..."
                 if [[ -f "Makefile" ]]; then
-                    # Use existing Makefile, set CH32V003FUN to our submodule
+                    # Use existing Makefile, set CH32V003FUN to our dependency
                     if CH32V003FUN=../ch32v003fun make > /dev/null 2>&1; then
                         if [[ -f "$binary_name" ]]; then
                             local size=$(stat -c%s "$binary_name")
@@ -509,58 +482,40 @@ main() {
             find firmware/examples/ -name "*.o" -delete 2>/dev/null || true
         fi
         
-        # Remove git submodules
-        print_status "Removing git submodules"
+        # Remove dependency directories
+        print_status "Removing dependency directories"
         
-        # Remove pico-sdk submodule
+        # Remove pico-sdk
         if [[ -d "pico-sdk" ]]; then
-            print_status "Removing pico-sdk submodule"
+            print_status "Removing pico-sdk"
             rm -rf pico-sdk
         fi
         
-        # Remove ch32v003fun submodule
+        # Remove ch32v003fun
         if [[ -d "firmware/ch32v003fun" ]]; then
-            print_status "Removing ch32v003fun submodule"
+            print_status "Removing ch32v003fun"
             rm -rf firmware/ch32v003fun
         fi
         
-        # Remove picorvd submodule
+        # Remove picorvd
         if [[ -d "picorvd" ]]; then
-            print_status "Removing picorvd submodule"
+            print_status "Removing picorvd"
             rm -rf picorvd
         fi
         
-        # Remove any other firmware submodules (check for .git files/directories)
+        
+        # Remove any other firmware repositories (check for .git directories)
         if [[ -d "firmware" ]]; then
             for dir in firmware/*/; do
                 if [[ -d "$dir" && ("$dir" != "firmware/examples/") ]]; then
-                    # Check if it's a submodule (has .git file or directory)
-                    if [[ -e "${dir}.git" ]] || [[ -d "${dir}.git" ]]; then
+                    # Check if it's a git repository (has .git directory)
+                    if [[ -d "${dir}.git" ]]; then
                         dirname=$(basename "$dir")
-                        print_status "Removing firmware submodule: $dirname"
+                        print_status "Removing firmware repository: $dirname"
                         rm -rf "$dir"
                     fi
                 fi
             done
-        fi
-        
-        # Clean up .gitmodules entries (reset to clean state)
-        if [[ -f ".gitmodules" ]]; then
-            print_status "Resetting .gitmodules file"
-            cat > .gitmodules << 'EOF'
-[submodule "pico-sdk"]
-	path = pico-sdk
-	url = https://github.com/raspberrypi/pico-sdk.git
-	branch = master
-[submodule "firmware/ch32v003fun"]
-	path = firmware/ch32v003fun
-	url = https://github.com/cnlohr/ch32v003fun.git
-	branch = master
-[submodule "picorvd"]
-	path = picorvd
-	url = https://github.com/aappleby/picorvd.git
-	branch = master
-EOF
         fi
         
         print_success "Distribution clean completed!"
@@ -573,7 +528,7 @@ EOF
             print_status "Building project first..."
             check_directory
             check_dependencies
-            init_submodules
+            init_dependencies
             build_firmware
             configure_build
             build_project
@@ -593,7 +548,7 @@ EOF
         echo
         echo "This script will:"
         echo "  1. Check for required dependencies"
-        echo "  2. Initialize git submodules (Pico SDK, PewPewCH32 framework)"
+        echo "  2. Clone build dependencies (Pico SDK, CH32V003 framework, picorvd)"
         echo "  3. Build example firmware (if RISC-V toolchain available)"
         echo "  4. Configure and build the PewPewCH32 programmer"
         echo "  5. Generate .uf2 file ready for flashing to Pico"
@@ -613,7 +568,7 @@ EOF
     
     check_directory
     check_dependencies
-    init_submodules
+    init_dependencies
     build_firmware
     configure_build "$clean_build"
     build_project

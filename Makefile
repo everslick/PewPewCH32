@@ -1,7 +1,7 @@
 # PewPewCH32 Programmer Makefile
 # This Makefile provides convenient targets that delegate to build.sh
 
-.PHONY: all clean distclean install help
+.PHONY: all clean distclean install mon help
 .DEFAULT_GOAL := all
 
 # Default target - build the project
@@ -19,6 +19,10 @@ distclean:
 # Install firmware to connected Pico
 install:
 	@./build.sh install
+
+# Monitor serial output
+mon:
+	@screen /dev/ttyACM0 115200
 
 # Show help information
 help:

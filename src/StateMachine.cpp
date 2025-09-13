@@ -10,12 +10,14 @@
 #endif
 
 StateMachine::StateMachine(LedController* led, RVDebug* rvd, WCHFlash* flash) 
-    : current_state(STATE_IDLE),
-      state_timer(0),
+    : state_timer(0),
       current_firmware_index(0),
       led_controller(led),
       rv_debug(rvd),
       wch_flash(flash) {
+    // Initialize to IDLE state properly (triggers state entry actions)
+    current_state = (SystemState)-1; // Set to invalid state first
+    setState(STATE_IDLE);
 }
 
 StateMachine::~StateMachine() {

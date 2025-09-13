@@ -1,5 +1,5 @@
 # CH32V003 Firmware Manifest
-# This file reads firmware definitions from firmware.txt and manages git submodules
+# This file reads firmware definitions from firmware.txt and generates firmware inventory
 
 # Set the firmware base directory (the directory containing this file)
 set(FIRMWARE_BASE_DIR ${CMAKE_CURRENT_LIST_DIR})
@@ -23,7 +23,7 @@ function(add_firmware NAME SOURCE_DIR BINARY_NAME)
     message(STATUS "Added firmware: ${NAME} (${SOURCE_DIR}/${BINARY_NAME})")
 endfunction()
 
-# Function to parse firmware.txt and add submodules if needed
+# Function to parse firmware.txt (repositories are cloned by build.sh)
 function(load_firmware_manifest)
     set(MANIFEST_FILE ${FIRMWARE_BASE_DIR}/../firmware.txt)
     
@@ -51,35 +51,12 @@ function(load_firmware_manifest)
                 
                 set(SHOULD_ADD_FIRMWARE TRUE)
                 
-                # Check if git URL is specified
-                if(NUM_PARTS GREATER_EQUAL 4)
-                    list(GET LINE_PARTS 3 FW_GIT_URL)
-                    set(FW_GIT_BRANCH "main")
-                    
-                    # Check if branch is specified
-                    if(NUM_PARTS GREATER_EQUAL 5)
-                        list(GET LINE_PARTS 4 FW_GIT_BRANCH)
-                    endif()
-                    
-                    # Check if submodule exists, add if not
-                    set(SUBMODULE_PATH ${FIRMWARE_BASE_DIR}/${FW_SOURCE_DIR})
-                    if(NOT EXISTS ${SUBMODULE_PATH}/.git)
-                        message(STATUS "Adding git submodule: ${FW_NAME} from ${FW_GIT_URL}")
-                        execute_process(
-                            COMMAND git submodule add -b ${FW_GIT_BRANCH} ${FW_GIT_URL} firmware/${FW_SOURCE_DIR}
-                            WORKING_DIRECTORY ${FIRMWARE_BASE_DIR}/..
-                            RESULT_VARIABLE SUBMODULE_RESULT
-                            OUTPUT_QUIET
-                            ERROR_QUIET
-                        )
-                        
-                        if(NOT SUBMODULE_RESULT EQUAL 0)
-                            message(WARNING "Failed to add submodule ${FW_NAME}, skipping")
-                            set(SHOULD_ADD_FIRMWARE FALSE)
-                        endif()
-                    else()
-                        message(STATUS "Submodule already exists: ${FW_NAME}")
-                    endif()
+                # Skip git URL processing - repositories are cloned by build.sh
+                # Just check if the firmware directory exists
+                set(FIRMWARE_PATH ${FIRMWARE_BASE_DIR}/${FW_SOURCE_DIR})
+                if(NOT EXISTS ${FIRMWARE_PATH})
+                    message(WARNING "Firmware directory not found: ${FIRMWARE_PATH} (run build.sh to clone)")
+                    set(SHOULD_ADD_FIRMWARE FALSE)
                 endif()
                 
                 # Add the firmware to the build only if successful

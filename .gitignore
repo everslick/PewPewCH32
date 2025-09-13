@@ -6,6 +6,10 @@ build/
 **.lst
 **.map
 
+# Cloned build dependencies
+pico-sdk/
+picorvd/
+
 # User-specific firmware configuration
 firmware.txt
 

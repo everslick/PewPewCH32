@@ -62,7 +62,7 @@ PewPewCH32 is designed for developers and manufacturers who need to:
 
 - **ARM GCC toolchain** (`arm-none-eabi-gcc`)
 - **CMake** 3.13+
-- **Git** (for submodules)
+- **Git** (for cloning dependencies)
 - **xxd** (for firmware conversion)
 - **Optional**: RISC-V toolchain (`gcc-riscv64-unknown-elf`) for firmware builds
 
@@ -77,7 +77,7 @@ PewPewCH32 is designed for developers and manufacturers who need to:
 
 The build script automatically:
 - Checks for all required dependencies
-- Initializes git submodules (Pico SDK, ch32v003fun)
+- Clones build dependencies (Pico SDK, ch32v003fun)
 - Clones external firmware repositories from `firmware.txt`
 - Builds all firmware (if RISC-V toolchain available)
 - Configures and builds the programmer
@@ -121,7 +121,7 @@ The programmer uses a **firmware manifest system** defined in `firmware.txt` at 
 # Built-in example firmware
 blink examples/blink blink.bin
 
-# External firmware repositories (cloned, not submodules)
+# External firmware repositories (cloned)
 ext-fw fw fw.bin https://github.com/user/fw.git
 ```
 
@@ -138,7 +138,7 @@ ext-fw fw fw.bin https://github.com/user/fw.git
 2. Run `./build.sh` - repository is cloned and built automatically
 3. Firmware is embedded and selectable via BOOTSEL button
 
-**Note:** External firmware repositories are cloned but not tracked as git submodules. They are listed in `.gitignore` to keep the main repository clean.
+**Note:** External firmware repositories are cloned directly. They are listed in `.gitignore` to keep the main repository clean.
 
 ## Flashing and Usage
 
@@ -212,9 +212,9 @@ PewPewCH32/
 │   ├── manifest.cmake        # CMake firmware build system
 │   ├── examples/             # Built-in example firmware
 │   │   └── blink/
-│   ├── ch32v003fun/          # CH32V003 SDK (submodule)
+│   ├── ch32v003fun/          # CH32V003 SDK (cloned)
 │   └── ext-fw/               # Example external firmware (cloned, not tracked)
-├── pico-sdk/                 # Raspberry Pi Pico SDK (submodule)
+├── pico-sdk/                 # Raspberry Pi Pico SDK (cloned)
 └── build/                    # Generated build files
     ├── PewPewCH32.uf2
     └── src/firmware_*.c      # Generated firmware arrays
@@ -234,8 +234,8 @@ The build system uses:
 - **CMake** for main project configuration
 - **Custom manifest system** (`firmware/manifest.cmake`) for firmware integration
 - **xxd** for binary-to-C-array conversion
-- **Git submodules** for build dependencies (Pico SDK, ch32v003fun)
-- **Git clone** for external firmware (not tracked as submodules)
+- **Git clone** for build dependencies (Pico SDK, ch32v003fun, picorvd)
+- **Git clone** for external firmware (not tracked in main repository)
 
 ## Based On
 
