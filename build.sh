@@ -87,7 +87,7 @@ check_dependencies() {
         exit 1
     fi
     
-    print_success "All required dependencies found"
+    print_success "All required build dependencies found"
 }
 
 # Clone firmware repositories from firmware.txt (not as submodules)
@@ -148,6 +148,33 @@ clone_firmware_repos() {
     fi
 }
 
+# Apply patches to picorvd for SDK compatibility
+apply_picorvd_patches() {
+    if [[ -d "picorvd" ]]; then
+        print_status "Applying picorvd patches for SDK compatibility..."
+        
+        # Fix SDK compatibility - replace iobank0_hw with io_bank0_hw
+        if [[ -f "picorvd/src/PicoSWIO.cpp" ]]; then
+            if grep -q "iobank0_hw" picorvd/src/PicoSWIO.cpp; then
+                sed -i 's/iobank0_hw/io_bank0_hw/g' picorvd/src/PicoSWIO.cpp
+                print_status "Applied SDK compatibility fix: iobank0_hw -> io_bank0_hw"
+            fi
+        fi
+        
+        # Disable conflicting tusb_config.h
+        if [[ -f "picorvd/src/tusb_config.h" && ! -f "picorvd/src/tusb_config.h.bak" ]]; then
+            mv picorvd/src/tusb_config.h picorvd/src/tusb_config.h.bak
+            print_status "Disabled conflicting tusb_config.h"
+        fi
+        
+        # Configure git to ignore changes in picorvd submodule
+        if ! git config submodule.picorvd.ignore >/dev/null 2>&1; then
+            git config submodule.picorvd.ignore all
+            print_status "Configured git to ignore changes in picorvd submodule"
+        fi
+    fi
+}
+
 # Initialize git submodules
 init_submodules() {
     print_status "Initializing git submodules..."
@@ -176,6 +203,21 @@ init_submodules() {
         git submodule update --init firmware/ch32v003fun
     else
         print_status "PewPewCH32 framework submodule already initialized"
+    fi
+    
+    # Check if picorvd submodule is already configured in git
+    if ! git config -f .gitmodules --get-regexp 'submodule\.picorvd' > /dev/null 2>&1; then
+        print_status "Adding picorvd submodule..."
+        git submodule add https://github.com/aappleby/picorvd.git picorvd
+    fi
+    
+    if [[ ! -d "picorvd/.git" ]]; then
+        print_status "Initializing picorvd submodule..."
+        git submodule update --init picorvd
+        apply_picorvd_patches
+    else
+        print_status "picorvd submodule already initialized"
+        apply_picorvd_patches
     fi
     
     # Clone firmware repositories from firmware.txt (not as submodules)
@@ -421,12 +463,20 @@ main() {
     # Handle command line arguments
     local clean_build=""
     if [[ "$1" == "clean" ]]; then
-        clean_build="clean"
-        print_status "Clean build requested"
+        print_status "Clean requested"
+        # Just remove build directory and exit
+        if [[ -d "build" ]]; then
+            print_status "Removing build/ directory"
+            rm -rf build
+            print_success "Build directory cleaned!"
+        else
+            print_status "Build directory doesn't exist, nothing to clean"
+        fi
+        exit 0
     elif [[ "$1" == "distclean" ]]; then
         print_status "Distribution clean requested - removing all generated files"
         
-        # Remove build directory
+        # First do a regular clean (remove build directory)
         if [[ -d "build" ]]; then
             print_status "Removing build/ directory"
             rm -rf build
@@ -445,8 +495,8 @@ main() {
         # Remove generated linker files from ch32v003fun
         find firmware/ch32v003fun/ -name "generated__.ld" -delete 2>/dev/null || true
         
-        # Remove CMake cache and generated files (but preserve .gitignore patterns)
-        rm -f CMakeCache.txt cmake_install.cmake Makefile 2>/dev/null || true
+        # Remove any stray CMake files in root (but preserve our frontend Makefile)
+        rm -f CMakeCache.txt cmake_install.cmake 2>/dev/null || true
         rm -rf CMakeFiles/ 2>/dev/null || true
         
         # Clean firmware examples
@@ -472,6 +522,12 @@ main() {
         if [[ -d "firmware/ch32v003fun" ]]; then
             print_status "Removing ch32v003fun submodule"
             rm -rf firmware/ch32v003fun
+        fi
+        
+        # Remove picorvd submodule
+        if [[ -d "picorvd" ]]; then
+            print_status "Removing picorvd submodule"
+            rm -rf picorvd
         fi
         
         # Remove any other firmware submodules (check for .git files/directories)
@@ -500,6 +556,10 @@ main() {
 	path = firmware/ch32v003fun
 	url = https://github.com/cnlohr/ch32v003fun.git
 	branch = master
+[submodule "picorvd"]
+	path = picorvd
+	url = https://github.com/aappleby/picorvd.git
+	branch = master
 EOF
         fi
         
@@ -526,7 +586,7 @@ EOF
         echo "Usage: $0 [OPTIONS]"
         echo
         echo "OPTIONS:"
-        echo "  clean      Clean previous build before building"
+        echo "  clean      Remove build directory only"
         echo "  distclean  Remove all generated files for git commit"
         echo "  install    Copy firmware to Pico in BOOTSEL mode"
         echo "  -h, --help Show this help message"

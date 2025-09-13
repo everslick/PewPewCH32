@@ -25,22 +25,39 @@ pico_sdk_init()
 # Add main executable
 add_executable(PewPewCH32
     src/main.cpp
-    src/Console.cpp
-    src/GDBServer.cpp
-    src/PicoSWIO.cpp
-    src/RVDebug.cpp
-    src/SoftBreak.cpp
-    src/WCHFlash.cpp
-    src/utils.cpp
+    # Use picorvd sources from submodule (excluding their main.cpp)
+    picorvd/src/Console.cpp
+    picorvd/src/GDBServer.cpp
+    picorvd/src/Packet.cpp
+    picorvd/src/PicoSWIO.cpp
+    picorvd/src/RVDebug.cpp
+    picorvd/src/SoftBreak.cpp
+    picorvd/src/WCHFlash.cpp
+    picorvd/src/utils.cpp
+    # Include test file from picorvd
+    picorvd/test/picorvd_tests.cpp
+    # Our additional modules
+    src/LedController.cpp
+    src/StateMachine.cpp
+    src/BuzzerController.cpp
+    src/InputHandler.cpp
 )
 
 # Include directories
 target_include_directories(PewPewCH32 PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/src
+    ${CMAKE_CURRENT_BINARY_DIR}            # Include build directory for generated PIO headers
+)
+
+# Add picorvd includes AFTER the SDK includes to avoid conflicts with tusb_config.h
+target_include_directories(PewPewCH32 PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/picorvd/src  # Include picorvd headers
+    ${CMAKE_CURRENT_LIST_DIR}/picorvd      # Include picorvd root for test/ includes
 )
 
 # Generate PIO headers
-pico_generate_pio_header(PewPewCH32 ${CMAKE_CURRENT_LIST_DIR}/src/singlewire.pio)
+# picorvd expects singlewire.pio.h to be in a bin/ subdirectory
+pico_generate_pio_header(PewPewCH32 ${CMAKE_CURRENT_LIST_DIR}/picorvd/src/singlewire.pio OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/bin)
 pico_generate_pio_header(PewPewCH32 ${CMAKE_CURRENT_LIST_DIR}/src/ws2812.pio)
 
 # Link libraries
