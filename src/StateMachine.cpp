@@ -3,10 +3,12 @@
 #include <string.h>
 #include "pico/stdlib.h"
 #include "utils.h"
-#include "fallback_firmware.h"
 
 #ifdef FIRMWARE_INVENTORY_ENABLED
-#include "firmware_inventory.h"
+  #include "firmware_inventory.h"
+#else
+  extern const uint8_t fallback_firmware[];
+  extern const size_t  fallback_firmware_size;
 #endif
 
 StateMachine::StateMachine(LedController* led, RVDebug* rvd, WCHFlash* flash) 
@@ -88,9 +90,7 @@ void StateMachine::process() {
                     firmware_size = firmware_list[current_firmware_index].size;
                     printf_g("// Programming firmware: %s\n", firmware_list[current_firmware_index].name);
                 } else {
-                    firmware_data = fallback_firmware;
-                    firmware_size = fallback_firmware_size;
-                    printf_g("// Invalid index, using fallback firmware\n");
+                    printf_g("// Invalid index\n");
                 }
 #else
                 firmware_data = fallback_firmware;
@@ -182,6 +182,10 @@ bool StateMachine::haltWithTimeout(uint32_t timeout_ms) {
 }
 
 bool StateMachine::programFlash(const uint8_t* data, size_t size) {
+    if (!data || !size) {
+        return false;
+    }
+
     printf_g("// Starting flash programming...\n");
     printf_g("// Firmware size: %d bytes\n", size);
     

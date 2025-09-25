@@ -8,7 +8,6 @@
 #include "StateMachine.h"
 #include "BuzzerController.h"
 #include "InputHandler.h"
-#include "fallback_firmware.h"
 
 // Debug modules
 #include "PicoSWIO.h"
@@ -26,6 +25,7 @@
 
 // Configuration
 #define PIN_PRG_SWIO    9   // To SDI on CH32
+
 const int ch32v003_flash_size = 16*1024;
 const char* PROGRAMMER_VERSION = "1.0.0";
 
