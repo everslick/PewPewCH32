@@ -143,7 +143,8 @@ function(build_firmware_inventory TARGET_NAME)
     # Create firmware list array
     set(SOURCE_CONTENT "${SOURCE_CONTENT}\nconst firmware_info_t firmware_list[] = {\n")
     foreach(FIRMWARE ${FIRMWARE_LIST})
-        set(SOURCE_CONTENT "${SOURCE_CONTENT}    {\"${FIRMWARE}\", firmware_${FIRMWARE}_bin, 0}, // Size filled at runtime\n")
+        file(SIZE ${FIRMWARE_${FIRMWARE}_BINARY_PATH} FIRMWARE_FILE_SIZE)
+        set(SOURCE_CONTENT "${SOURCE_CONTENT}    {\"${FIRMWARE}\", firmware_${FIRMWARE}_bin, ${FIRMWARE_FILE_SIZE}},\n")
     endforeach()
     set(SOURCE_CONTENT "${SOURCE_CONTENT}};\n\nconst int firmware_count = sizeof(firmware_list) / sizeof(firmware_list[0]);\n")
     

@@ -24,7 +24,7 @@
 #endif
 
 // Configuration
-#define PIN_PRG_SWIO    9   // To SDI on CH32
+#define PIN_PRG_SWIO    8   // To SDI on CH32
 
 const int ch32v003_flash_size = 16*1024;
 const char* PROGRAMMER_VERSION = "1.0.0";

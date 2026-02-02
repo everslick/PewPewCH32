@@ -6,9 +6,9 @@
 
 // Pin definitions
 #define PIN_WS2812      16  // WS2812 RGB LED on Waveshare Pico Zero
-#define PIN_LED_GREEN   27
-#define PIN_LED_YELLOW  28
-#define PIN_LED_RED     29
+#define PIN_LED_GREEN   14
+#define PIN_LED_YELLOW  15
+#define PIN_LED_RED     26
 
 // WS2812 brightness (0-255)
 #define LED_BRIGHTNESS 64

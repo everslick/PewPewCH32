@@ -228,6 +228,7 @@ bool StateMachine::programFlash(const uint8_t* data, size_t size) {
     
     wch_flash->lock_flash();
     rv_debug->reset();
-    
+    rv_debug->resume();
+
     return true;
 }
