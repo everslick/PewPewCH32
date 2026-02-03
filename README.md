@@ -188,9 +188,166 @@ minicom -D /dev/ttyACM0 -b 115200
 
 The programmer currently includes:
 
-- **blink** - Simple LED blink example (built-in)
+- **bootloader** - I2C bootloader (flash first, enables OTA updates)
+- **blink** - Simple LED blink example (bootloader-compatible)
+- **watchdog** - I2C multi-channel watchdog timer
 
 Additional firmware can be added by editing `firmware.txt` and running `./build.sh`.
+
+## I2C Bootloader
+
+The CH32V003 firmware supports over-the-air updates via I2C, enabling firmware updates without physical access to the SWIO debug interface.
+
+### Architecture
+
+The bootloader occupies the first 3KB of flash and is never updated OTA. Applications are linked at offset 0x0C80 and can be updated via I2C from a host controller.
+
+**Memory Layout (16KB Flash):**
+
+```
+0x0000 ┌──────────────────┐
+       │   Bootloader     │  3KB (fixed, flash via SWIO only)
+0x0C00 ├──────────────────┤
+       │   Boot State     │  64B (update request flag)
+0x0C40 ├──────────────────┤
+       │   App Header     │  64B (magic, version, CRC, entry)
+0x0C80 ├──────────────────┤
+       │   Application    │  ~12.9KB (updatable via I2C)
+0x4000 └──────────────────┘
+```
+
+### Boot Flow
+
+1. **Power-on** → Bootloader runs first
+2. **Check boot state** (0x0C00): If `UPDATE` flag set → stay in bootloader mode
+3. **Validate app**: Check header magic, CRC32 of header and app code
+4. **If valid** → Jump to application at entry point (0x0C80)
+5. **If invalid** → Stay in bootloader mode, signal via POST codes
+
+### POST Codes (Error LED)
+
+When the bootloader cannot boot an application, the error LED blinks a diagnostic pattern:
+
+| Flashes | Meaning |
+|---------|---------|
+| 1 | No application firmware (flash erased) |
+| 2 | Invalid app header (bad magic or header CRC) |
+| 3 | App code CRC mismatch |
+
+Pattern: 150ms on, 150ms off per flash, repeats every 2 seconds.
+
+### I2C Protocol
+
+Both bootloader and application use I2C address **0x42**. The mode is detected via register 0x00:
+
+- **Application mode**: Returns HW_TYPE (e.g., `0x04` for watchdog)
+- **Bootloader mode**: Returns HW_TYPE | 0x80 (e.g., `0x84`)
+
+### Application Registers (0xE0-0xE7)
+
+Applications include bootloader client code that handles update requests:
+
+| Register | Name | R/W | Description |
+|----------|------|-----|-------------|
+| 0xE0 | APP_BL_VERSION | R | Bootloader protocol version |
+| 0xE1 | APP_UPDATE_CMD | W | Write 0xAA to enter bootloader mode |
+| 0xE2-E3 | APP_UPDATE_SIZE | W | Expected firmware size (little-endian) |
+| 0xE4-E7 | APP_UPDATE_CRC | W | Expected firmware CRC32 (little-endian) |
+
+### Bootloader Registers (0xF0-0xFF)
+
+Active only in bootloader mode:
+
+| Register | Name | R/W | Description |
+|----------|------|-----|-------------|
+| 0xF0 | BL_VERSION | R | Bootloader protocol version (currently 1) |
+| 0xF1 | BL_STATUS | R | 0=idle, 1=busy, 0x40=success, 0x80+=error |
+| 0xF2 | BL_ERROR | R | Last error code |
+| 0xF8 | BL_CMD | W | Command byte (see below) |
+| 0xF9 | BL_ADDR_L | W | Page address low byte |
+| 0xFA | BL_ADDR_H | W | Page address high byte |
+| 0xFB | BL_DATA | W | 64-byte page data buffer |
+| 0xFC-FF | BL_CRC | R/W | Expected CRC32 (4 bytes, little-endian) |
+
+**Commands (write to 0xF8):**
+
+| Value | Command | Description |
+|-------|---------|-------------|
+| 0x01 | ERASE | Erase application area |
+| 0x02 | WRITE | Write 64-byte page at BL_ADDR |
+| 0x03 | VERIFY | Verify app CRC matches BL_CRC |
+| 0x04 | BOOT | Boot application |
+
+### Firmware Update Sequence
+
+From the host's perspective:
+
+```
+1. Read register 0x00 → verify app mode (value < 0x80)
+2. Write expected size to 0xE2-0xE3 (little-endian)
+3. Write expected CRC32 to 0xE4-0xE7 (little-endian)
+4. Write 0xAA to 0xE1 → device resets into bootloader
+5. Wait 100ms, read 0x00 → verify bootloader mode (value >= 0x80)
+6. Read 0xF0 → check bootloader protocol version
+7. Write 0x01 to 0xF8 (erase), poll 0xF1 until idle
+8. For each 64-byte page:
+   a. Write page address to 0xF9-0xFA
+   b. Write 64 bytes to 0xFB
+   c. Write 0x02 to 0xF8 (write page)
+   d. Poll 0xF1 until idle (status 0x00)
+9. Write expected CRC32 to 0xFC-0xFF
+10. Write 0x03 to 0xF8 (verify), poll until idle
+11. If status 0x40 (success): Write 0x04 to 0xF8 (boot)
+12. Read 0x00 → verify back in app mode
+```
+
+### App Header Format
+
+The 64-byte application header at 0x0C40:
+
+```c
+typedef struct {
+  uint32_t magic;           // 0x454D4F57 ("WOME" little-endian)
+  uint8_t  fw_ver_major;    // Firmware major version
+  uint8_t  fw_ver_minor;    // Firmware minor version
+  uint8_t  bl_ver_min;      // Minimum bootloader version required
+  uint8_t  hw_type;         // Hardware type (0=generic, 4=watchdog)
+  uint32_t app_size;        // Application code size in bytes
+  uint32_t app_crc32;       // CRC32 of application code
+  uint32_t entry_point;     // Entry address (normally 0x0C80)
+  uint32_t header_crc32;    // CRC32 of header bytes 0-23
+  uint8_t  reserved[40];    // Padding to 64 bytes (0xFF)
+} app_header_t;
+```
+
+### Build Outputs
+
+Each bootloader-compatible firmware produces two files:
+
+- **`.bin`** - Raw binary for SWIO flashing (no header)
+- **`.upd`** - Update file with 64-byte header prepended (for I2C updates)
+
+The `.upd` file is generated by `bootloader/tools/mkupd.py`:
+
+```bash
+python3 mkupd.py firmware.bin firmware.upd --major 1 --minor 0 --hw-type 4
+```
+
+### Initial Setup
+
+To enable I2C updates on a new CH32V003:
+
+1. Flash the bootloader via SWIO (once, never updated OTA)
+2. Flash the application via SWIO, or update via I2C
+
+```bash
+# Flash bootloader
+cd firmware/bootloader && make flash
+
+# Flash application (either method)
+cd firmware/emonio-wd && make flash        # Via SWIO
+# OR send .upd file via I2C from host      # Via bootloader
+```
 
 ## Project Structure
 
@@ -210,8 +367,14 @@ PewPewCH32/
 │   └── utils.cpp
 ├── firmware/                 # Firmware directory
 │   ├── manifest.cmake        # CMake firmware build system
+│   ├── bootloader/           # I2C bootloader (flash once via SWIO)
+│   │   ├── src/              # Bootloader source (bl_main, bl_flash, bl_i2c)
+│   │   ├── lib/              # Shared library (bl_client, crc32, app.ld)
+│   │   ├── linker/           # Bootloader linker script
+│   │   └── tools/            # mkupd.py for generating .upd files
 │   ├── examples/             # Built-in example firmware
 │   │   └── blink/
+│   ├── emonio-wd/            # I2C watchdog firmware (cloned)
 │   ├── ch32v003fun/          # CH32V003 SDK (cloned)
 │   └── ext-fw/               # Example external firmware (cloned, not tracked)
 ├── pico-sdk/                 # Raspberry Pi Pico SDK (cloned)
@@ -227,6 +390,13 @@ PewPewCH32/
 1. **Local firmware**: Place in `firmware/examples/your-firmware/`
 2. **External firmware**: Add git URL to `firmware.txt` (will be cloned but not tracked)
 3. **Build requirements**: Must output `.bin` file and use ch32v003fun framework
+
+**For bootloader-compatible firmware:**
+- Include `bootloader/lib/` in your build (bl_client.c, crc32.c)
+- Use `bootloader/lib/app.ld` as linker script (links at 0x0C80)
+- Handle I2C registers 0xE0-0xE7 for update requests
+- Call `bl_client_init()` at startup
+- Generate `.upd` file using `bootloader/tools/mkupd.py`
 
 ### Build System Details
 
