@@ -48,7 +48,7 @@ private:
     
     // Helper functions
     bool haltWithTimeout(uint32_t timeout_ms);
-    bool programFlash(const uint8_t* data, size_t size);
+    bool programFlash(const uint8_t* data, size_t size, uint32_t base_address);
 };
 
 #endif // STATE_MACHINE_H

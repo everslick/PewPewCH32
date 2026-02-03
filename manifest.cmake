@@ -126,11 +126,14 @@ function(extract_fw_metadata BINARY_PATH OUT_PREFIX)
 endfunction()
 
 # Function to add a firmware to the build
-function(add_firmware NAME SOURCE_DIR BINARY_NAME FALLBACK_LOAD_ADDR)
+function(add_firmware NAME BINARY_PATH FALLBACK_LOAD_ADDR)
     # Add to firmware list
     list(APPEND FIRMWARE_LIST ${NAME})
 
-    set(BINARY_PATH ${FIRMWARE_BASE_DIR}/${SOURCE_DIR}/${BINARY_NAME})
+    # Make path absolute if relative
+    if(NOT IS_ABSOLUTE "${BINARY_PATH}")
+        set(BINARY_PATH ${FIRMWARE_BASE_DIR}/${BINARY_PATH})
+    endif()
 
     # Try to extract embedded metadata
     extract_fw_metadata("${BINARY_PATH}" META)
@@ -156,12 +159,10 @@ function(add_firmware NAME SOURCE_DIR BINARY_NAME FALLBACK_LOAD_ADDR)
         set(VERSION_MINOR 0)
         set(META_NAME "")
         set(HAS_METADATA FALSE)
-        message(STATUS "Added firmware: ${NAME} (${SOURCE_DIR}/${BINARY_NAME} @ ${BASE_ADDRESS}) - no metadata")
+        message(STATUS "Added firmware: ${NAME} (${BINARY_PATH} @ ${BASE_ADDRESS}) - no metadata")
     endif()
 
     # Set variables for this firmware
-    set(FIRMWARE_${NAME}_SOURCE_DIR ${SOURCE_DIR} CACHE INTERNAL "")
-    set(FIRMWARE_${NAME}_BINARY_NAME ${BINARY_NAME} CACHE INTERNAL "")
     set(FIRMWARE_${NAME}_BINARY_PATH ${BINARY_PATH} CACHE INTERNAL "")
     set(FIRMWARE_${NAME}_BASE_ADDRESS ${BASE_ADDRESS} CACHE INTERNAL "")
     set(FIRMWARE_${NAME}_HW_TYPE ${HW_TYPE} CACHE INTERNAL "")
@@ -191,37 +192,31 @@ function(load_firmware_manifest)
         string(REGEX MATCH "^[ \t]*$" IS_EMPTY ${LINE})
 
         if(NOT IS_COMMENT AND NOT IS_EMPTY)
-            # Parse the line: NAME SOURCE_DIR BINARY_NAME [LOAD_ADDR]
+            # Parse the line: NAME PATH [LOAD_ADDR]
             string(REGEX REPLACE "[ \t]+" ";" LINE_PARTS ${LINE})
             list(LENGTH LINE_PARTS NUM_PARTS)
 
-            if(NUM_PARTS GREATER_EQUAL 3)
+            if(NUM_PARTS GREATER_EQUAL 2)
                 list(GET LINE_PARTS 0 FW_NAME)
-                list(GET LINE_PARTS 1 FW_SOURCE_DIR)
-                list(GET LINE_PARTS 2 FW_BINARY_NAME)
+                list(GET LINE_PARTS 1 FW_PATH)
 
-                # Optional 4th field is fallback load address (hex, e.g. 0x0C80)
+                # Optional 3rd field is fallback load address (hex, e.g. 0x0C80)
                 set(FW_LOAD_ADDR "")
-                if(NUM_PARTS GREATER_EQUAL 4)
-                    list(GET LINE_PARTS 3 FIELD4)
-                    set(FW_LOAD_ADDR "${FIELD4}")
+                if(NUM_PARTS GREATER_EQUAL 3)
+                    list(GET LINE_PARTS 2 FIELD3)
+                    set(FW_LOAD_ADDR "${FIELD3}")
                 endif()
-
-                set(SHOULD_ADD_FIRMWARE TRUE)
 
                 # Check if the binary exists
-                set(BINARY_PATH ${FIRMWARE_BASE_DIR}/${FW_SOURCE_DIR}/${FW_BINARY_NAME})
-                if(NOT EXISTS ${BINARY_PATH})
+                set(BINARY_PATH ${FIRMWARE_BASE_DIR}/${FW_PATH})
+                if(EXISTS ${BINARY_PATH})
+                    add_firmware(${FW_NAME} ${FW_PATH} "${FW_LOAD_ADDR}")
+                else()
                     message(WARNING "Firmware binary not found: ${BINARY_PATH}")
-                    set(SHOULD_ADD_FIRMWARE FALSE)
-                endif()
-
-                if(SHOULD_ADD_FIRMWARE)
-                    add_firmware(${FW_NAME} ${FW_SOURCE_DIR} ${FW_BINARY_NAME} "${FW_LOAD_ADDR}")
                 endif()
 
             else()
-                message(WARNING "Invalid firmware.txt line (need at least 3 parts): ${LINE}")
+                message(WARNING "Invalid firmware.txt line (need at least 2 parts): ${LINE}")
             endif()
         endif()
     endforeach()
@@ -235,9 +230,10 @@ function(build_firmware_inventory TARGET_NAME)
     set(GENERATED_SOURCES "")
 
     foreach(FIRMWARE ${FIRMWARE_LIST})
-        set(SOURCE_DIR ${FIRMWARE_${FIRMWARE}_SOURCE_DIR})
-        set(BINARY_NAME ${FIRMWARE_${FIRMWARE}_BINARY_NAME})
         set(BINARY_PATH ${FIRMWARE_${FIRMWARE}_BINARY_PATH})
+
+        # Get filename from path
+        get_filename_component(BINARY_NAME ${BINARY_PATH} NAME)
 
         # Sanitize firmware name for C identifier
         string(REGEX REPLACE "[^a-zA-Z0-9_]" "_" FIRMWARE_SAFE ${FIRMWARE})
@@ -249,13 +245,20 @@ function(build_firmware_inventory TARGET_NAME)
         string(REGEX REPLACE "[^a-zA-Z0-9_]" "_" XXD_ARRAY_NAME ${BINARY_BASE})
         set(XXD_ARRAY_NAME "${XXD_ARRAY_NAME}_bin")
 
+        # Get file size for the length variable
+        file(SIZE ${BINARY_PATH} BINARY_SIZE)
+
         add_custom_command(
             OUTPUT ${OUTPUT_BASE}.h ${OUTPUT_BASE}.c
-            COMMAND cd ${FIRMWARE_BASE_DIR}/${SOURCE_DIR} && xxd -i ${BINARY_NAME} | sed '1i// Generated from ${BINARY_NAME}' | sed 's/unsigned char/const unsigned char/g' | sed 's/unsigned int/const unsigned int/g' | sed 's/${XXD_ARRAY_NAME}/${ARRAY_NAME}/g' > ${OUTPUT_BASE}.c
-            COMMAND echo "// Generated from ${BINARY_NAME}" > ${OUTPUT_BASE}.h
-            COMMAND echo "#pragma once" >> ${OUTPUT_BASE}.h
-            COMMAND echo "extern const unsigned char ${ARRAY_NAME}[];" >> ${OUTPUT_BASE}.h
-            COMMAND echo "extern const unsigned int ${ARRAY_NAME}_len;" >> ${OUTPUT_BASE}.h
+            COMMAND ${CMAKE_COMMAND} -E echo "// Generated from ${BINARY_NAME}" > ${OUTPUT_BASE}.c
+            COMMAND ${CMAKE_COMMAND} -E echo "const unsigned char ${ARRAY_NAME}[] = {" >> ${OUTPUT_BASE}.c
+            COMMAND xxd -i < ${BINARY_PATH} >> ${OUTPUT_BASE}.c
+            COMMAND ${CMAKE_COMMAND} -E echo "}\;" >> ${OUTPUT_BASE}.c
+            COMMAND ${CMAKE_COMMAND} -E echo "const unsigned int ${ARRAY_NAME}_len = ${BINARY_SIZE}\;" >> ${OUTPUT_BASE}.c
+            COMMAND ${CMAKE_COMMAND} -E echo "// Generated from ${BINARY_NAME}" > ${OUTPUT_BASE}.h
+            COMMAND ${CMAKE_COMMAND} -E echo "#pragma once" >> ${OUTPUT_BASE}.h
+            COMMAND ${CMAKE_COMMAND} -E echo "extern const unsigned char ${ARRAY_NAME}[]\;" >> ${OUTPUT_BASE}.h
+            COMMAND ${CMAKE_COMMAND} -E echo "extern const unsigned int ${ARRAY_NAME}_len\;" >> ${OUTPUT_BASE}.h
             DEPENDS ${BINARY_PATH}
             COMMENT "Converting ${FIRMWARE} binary to C array"
         )

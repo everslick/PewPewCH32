@@ -74,15 +74,15 @@ pico_enable_stdio_usb(PewPewCH32 1)
 pico_enable_stdio_uart(PewPewCH32 0)
 
 # Include firmware build system
-include(firmware/manifest.cmake)
+include(manifest.cmake)
 
-# Build firmware inventory (optional - comment out if no RISC-V toolchain)
-if(CMAKE_CROSSCOMPILING AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/firmware/examples/blink/blink.bin)
+# Build firmware inventory if we have firmware listed
+if(FIRMWARE_LIST)
     build_firmware_inventory(PewPewCH32)
     target_compile_definitions(PewPewCH32 PRIVATE FIRMWARE_INVENTORY_ENABLED)
     message(STATUS "Firmware inventory enabled")
 else()
-    message(STATUS "Firmware inventory disabled - using fallback firmware only")
+    message(STATUS "Firmware inventory disabled - no firmware found")
 endif()
 
 # Create UF2 file

@@ -90,103 +90,31 @@ check_dependencies() {
     print_success "All required build dependencies found"
 }
 
-# Pull updates for all firmware repositories that are git repos
-update_firmware_repos() {
-    print_status "Pulling updates for firmware repositories..."
+# Build emonio-ext firmware
+build_emonio_ext() {
+    local emonio_ext_dir="../emonio-ext"
 
-    local pulled_count=0
-    local failed_count=0
-
-    # Check firmware directory exists
-    if [[ ! -d "firmware" ]]; then
-        print_warning "firmware/ directory not found"
+    if [[ ! -d "$emonio_ext_dir" ]]; then
+        print_error "emonio-ext directory not found at $emonio_ext_dir"
+        print_status "Please clone emonio-ext repository first"
         return 1
     fi
 
-    # Iterate through all directories in firmware/
-    for dir in firmware/*/; do
-        if [[ -d "$dir" ]]; then
-            # Check if it's a git repository
-            if [[ -d "${dir}.git" ]]; then
-                local dirname=$(basename "$dir")
-                print_status "Pulling updates for '$dirname'..."
+    print_status "Building emonio-ext firmware..."
 
-                cd "$dir"
-                if git pull; then
-                    pulled_count=$((pulled_count + 1))
-                    print_success "Updated '$dirname'"
-                else
-                    failed_count=$((failed_count + 1))
-                    print_warning "Failed to pull '$dirname'"
-                fi
-                cd - > /dev/null
-            fi
+    cd "$emonio_ext_dir"
+    if make > /dev/null 2>&1; then
+        print_success "emonio-ext firmware built successfully"
+        # Show what was built
+        if [[ -d "bin" ]]; then
+            local count=$(ls -1 bin/*.bin 2>/dev/null | wc -l)
+            print_status "Built $count firmware binaries in emonio-ext/bin/"
         fi
-    done
-
-    if [[ $pulled_count -eq 0 && $failed_count -eq 0 ]]; then
-        print_warning "No git repositories found in firmware/"
     else
-        print_success "Pull complete: $pulled_count updated, $failed_count failed"
+        print_warning "emonio-ext build failed - trying verbose build..."
+        make
     fi
-}
-
-# Clone firmware repositories from firmware.txt
-clone_firmware_repos() {
-    if [[ -f "firmware.txt" ]]; then
-        print_status "Processing firmware.txt for firmware repositories..."
-
-        # Read firmware.txt line by line
-        while IFS= read -r line || [[ -n "$line" ]]; do
-            # Skip comments and empty lines
-            if [[ "$line" =~ ^[[:space:]]*# ]] || [[ -z "${line// }" ]]; then
-                continue
-            fi
-
-            # Parse line: NAME SOURCE_DIR BINARY_NAME [GIT_URL [GIT_BRANCH]]
-            read -r name source_dir binary_name git_url git_branch <<< "$line"
-
-            if [[ -n "$git_url" ]]; then
-                local firmware_path="firmware/$source_dir"
-
-                # Check if directory already exists
-                if [[ -d "$firmware_path/.git" ]]; then
-                    print_status "Firmware repository '$name' already cloned"
-                    # Pull latest changes
-                    print_status "Updating firmware repository '$name'..."
-                    cd "$firmware_path"
-                    if [[ -n "$git_branch" ]]; then
-                        git checkout "$git_branch" > /dev/null 2>&1
-                    fi
-                    git pull > /dev/null 2>&1
-                    cd - > /dev/null
-                    print_success "Firmware repository '$name' updated"
-                else
-                    print_status "Cloning firmware repository '$name' from $git_url"
-
-                    # Remove directory if it exists but isn't a git repo
-                    if [[ -d "$firmware_path" ]]; then
-                        rm -rf "$firmware_path"
-                    fi
-
-                    # Clone the repository
-                    if [[ -n "$git_branch" ]]; then
-                        git clone -b "$git_branch" "$git_url" "$firmware_path" > /dev/null 2>&1
-                    else
-                        git clone "$git_url" "$firmware_path" > /dev/null 2>&1
-                    fi
-
-                    if [[ -d "$firmware_path/.git" ]]; then
-                        print_success "Firmware repository '$name' cloned successfully"
-                    else
-                        print_warning "Failed to clone firmware repository '$name'"
-                    fi
-                fi
-            fi
-        done < "firmware.txt"
-    else
-        print_warning "firmware.txt not found - skipping firmware repository setup"
-    fi
+    cd - > /dev/null
 }
 
 # Apply patches to picorvd for SDK compatibility
@@ -221,11 +149,6 @@ init_dependencies() {
         git clone --recursive https://github.com/raspberrypi/pico-sdk.git pico-sdk
     fi
 
-    if [[ ! -d "firmware/ch32v003fun" ]]; then
-        print_status "Cloning CH32V003 framework..."
-        git clone https://github.com/cnlohr/ch32v003fun.git firmware/ch32v003fun
-    fi
-
     if [[ ! -d "picorvd" ]]; then
         print_status "Cloning picorvd..."
         git clone https://github.com/aappleby/picorvd.git picorvd
@@ -234,8 +157,8 @@ init_dependencies() {
         apply_picorvd_patches
     fi
 
-    # Clone firmware repositories from firmware.txt
-    clone_firmware_repos
+    # Build emonio-ext firmware
+    build_emonio_ext
 
     print_success "Build dependencies initialized"
 }
@@ -255,18 +178,16 @@ check_riscv_toolchain() {
     fi
 }
 
-# Build firmware from firmware.txt manifest
-build_firmware_from_manifest() {
+# Verify firmware binaries exist from firmware.txt manifest
+verify_firmware_binaries() {
     if [[ ! -f "firmware.txt" ]]; then
-        print_warning "firmware.txt not found - skipping firmware builds"
+        print_warning "firmware.txt not found - skipping firmware verification"
         return
     fi
 
-    if ! check_riscv_toolchain; then
-        return
-    fi
+    print_status "Verifying firmware binaries from manifest..."
 
-    print_status "Building firmware from manifest..."
+    local missing_count=0
 
     # Read firmware.txt line by line
     while IFS= read -r line || [[ -n "$line" ]]; do
@@ -275,72 +196,30 @@ build_firmware_from_manifest() {
             continue
         fi
 
-        # Parse line: NAME SOURCE_DIR BINARY_NAME [GIT_URL [GIT_BRANCH]]
-        read -r name source_dir binary_name git_url git_branch <<< "$line"
+        # Parse line: NAME PATH [LOAD_ADDR]
+        read -r name firmware_path rest <<< "$line"
 
-        if [[ -n "$name" && -n "$source_dir" && -n "$binary_name" ]]; then
-            local firmware_path="firmware/$source_dir"
-
-            if [[ -d "$firmware_path" ]]; then
-                print_status "Building firmware '$name' in $source_dir..."
-
-                cd "$firmware_path"
-
-                # Check if firmware is already built and up to date
-                if [[ -f "$binary_name" ]] && find . -name "*.c" -newer "$binary_name" | grep -q .; then
-                    print_status "Firmware '$name' needs rebuilding"
-                elif [[ -f "$binary_name" ]]; then
-                    print_status "Firmware '$name' already up to date"
-                    cd - > /dev/null
-                    continue
-                fi
-
-                # Try to build firmware
-                print_status "Compiling firmware '$name'..."
-                if [[ -f "Makefile" ]]; then
-                    # Use existing Makefile, set CH32V003FUN to our dependency
-                    if CH32V003FUN=../ch32v003fun make > /dev/null 2>&1; then
-                        if [[ -f "$binary_name" ]]; then
-                            local size=$(stat -c%s "$binary_name")
-                            print_success "Firmware '$name' built successfully (${size} bytes)"
-                        else
-                            print_warning "Firmware '$name' build completed but binary not found"
-                        fi
-                    else
-                        print_warning "Firmware '$name' build failed, but continuing..."
-                    fi
-                elif [[ -f "${name}.c" ]]; then
-                    # Try to compile single C file firmware
-                    if make > /dev/null 2>&1; then
-                        # Create binary manually if make didn't work perfectly
-                        if [[ ! -f "$binary_name" ]] && [[ -f "${name}.elf" ]]; then
-                            riscv64-unknown-elf-objcopy -O binary "${name}.elf" "$binary_name"
-                        fi
-
-                        if [[ -f "$binary_name" ]]; then
-                            local size=$(stat -c%s "$binary_name")
-                            print_success "Firmware '$name' built successfully (${size} bytes)"
-                        else
-                            print_warning "Firmware '$name' build had issues, but continuing..."
-                        fi
-                    else
-                        print_warning "Firmware '$name' build failed, but continuing..."
-                    fi
-                else
-                    print_warning "No build system found for firmware '$name', skipping..."
-                fi
-
-                cd - > /dev/null
+        if [[ -n "$name" && -n "$firmware_path" ]]; then
+            if [[ -f "$firmware_path" ]]; then
+                local size=$(stat -c%s "$firmware_path")
+                print_success "Found '$name': $firmware_path (${size} bytes)"
             else
-                print_warning "Firmware directory '$firmware_path' not found, skipping '$name'"
+                print_warning "Missing '$name': $firmware_path"
+                missing_count=$((missing_count + 1))
             fi
         fi
     done < "firmware.txt"
+
+    if [[ $missing_count -gt 0 ]]; then
+        print_warning "$missing_count firmware binaries missing - rebuild emonio-ext"
+    else
+        print_success "All firmware binaries found"
+    fi
 }
 
-# Build example firmware if RISC-V toolchain is available
+# Verify firmware binaries
 build_firmware() {
-    build_firmware_from_manifest
+    verify_firmware_binaries
 }
 
 # Create build directory and configure
@@ -496,32 +375,9 @@ main() {
             rm -rf build
         fi
 
-        # Remove firmware binaries
-        print_status "Cleaning firmware binaries"
-        find firmware/ -name "*.bin" -delete 2>/dev/null || true
-        find firmware/ -name "*.elf" -delete 2>/dev/null || true
-        find firmware/ -name "*.hex" -delete 2>/dev/null || true
-        find firmware/ -name "*.map" -delete 2>/dev/null || true
-        find firmware/ -name "*.lst" -delete 2>/dev/null || true
-        find firmware/ -name "*.o" -delete 2>/dev/null || true
-        find firmware/ -name "temp_*.c" -delete 2>/dev/null || true
-
-        # Remove generated linker files from ch32v003fun
-        find firmware/ch32v003fun/ -name "generated__.ld" -delete 2>/dev/null || true
-
         # Remove any stray CMake files in root (but preserve our frontend Makefile)
         rm -f CMakeCache.txt cmake_install.cmake 2>/dev/null || true
         rm -rf CMakeFiles/ 2>/dev/null || true
-
-        # Clean firmware examples
-        if [[ -d "firmware/examples" ]]; then
-            find firmware/examples/ -name "*.bin" -delete 2>/dev/null || true
-            find firmware/examples/ -name "*.elf" -delete 2>/dev/null || true
-            find firmware/examples/ -name "*.hex" -delete 2>/dev/null || true
-            find firmware/examples/ -name "*.map" -delete 2>/dev/null || true
-            find firmware/examples/ -name "*.lst" -delete 2>/dev/null || true
-            find firmware/examples/ -name "*.o" -delete 2>/dev/null || true
-        fi
 
         # Remove dependency directories
         print_status "Removing dependency directories"
@@ -532,32 +388,12 @@ main() {
             rm -rf pico-sdk
         fi
 
-        # Remove ch32v003fun
-        if [[ -d "firmware/ch32v003fun" ]]; then
-            print_status "Removing ch32v003fun"
-            rm -rf firmware/ch32v003fun
-        fi
-
         # Remove picorvd
         if [[ -d "picorvd" ]]; then
             print_status "Removing picorvd"
             rm -rf picorvd
         fi
 
-
-        # Remove any other firmware repositories (check for .git directories)
-        if [[ -d "firmware" ]]; then
-            for dir in firmware/*/; do
-                if [[ -d "$dir" && ("$dir" != "firmware/examples/") ]]; then
-                    # Check if it's a git repository (has .git directory)
-                    if [[ -d "${dir}.git" ]]; then
-                        dirname=$(basename "$dir")
-                        print_status "Removing firmware repository: $dirname"
-                        rm -rf "$dir"
-                    fi
-                fi
-            done
-        fi
 
         print_success "Distribution clean completed!"
         print_status "Repository is now ready for git commit"
@@ -576,11 +412,6 @@ main() {
         fi
         install_firmware
         exit $?
-    elif [[ "$1" == "update" ]]; then
-        # Pull updates for all firmware git repositories
-        check_directory
-        update_firmware_repos
-        exit $?
     elif [[ "$1" == "--help" ]] || [[ "$1" == "-h" ]]; then
         echo "PewPewCH32 Programmer Build Script"
         echo
@@ -590,13 +421,12 @@ main() {
         echo "  clean      Remove build directory only"
         echo "  distclean  Remove all generated files for git commit"
         echo "  install    Copy firmware to Pico in BOOTSEL mode"
-        echo "  update     Pull updates for all firmware git repositories"
         echo "  -h, --help Show this help message"
         echo
         echo "This script will:"
         echo "  1. Check for required dependencies"
-        echo "  2. Clone build dependencies (Pico SDK, CH32V003 framework, picorvd)"
-        echo "  3. Build example firmware (if RISC-V toolchain available)"
+        echo "  2. Clone build dependencies (Pico SDK, picorvd)"
+        echo "  3. Build emonio-ext firmware (requires RISC-V toolchain)"
         echo "  4. Configure and build the PewPewCH32 programmer"
         echo "  5. Generate .uf2 file ready for flashing to Pico"
         echo
@@ -608,7 +438,7 @@ main() {
         exit 0
     elif [[ -n "$1" ]]; then
         print_error "Unknown option: $1"
-        echo "Usage: $0 [clean|distclean|install|update]"
+        echo "Usage: $0 [clean|distclean|install]"
         echo "Use $0 --help for more information"
         exit 1
     fi

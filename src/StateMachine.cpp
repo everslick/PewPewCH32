@@ -82,23 +82,33 @@ void StateMachine::process() {
                 bool success = false;
                 const uint8_t* firmware_data = nullptr;
                 size_t firmware_size = 0;
-                
+                uint32_t base_address = 0;
+
                 // Select firmware to program
 #ifdef FIRMWARE_INVENTORY_ENABLED
                 if (current_firmware_index < firmware_count) {
-                    firmware_data = firmware_list[current_firmware_index].data;
-                    firmware_size = firmware_list[current_firmware_index].size;
-                    printf_g("// Programming firmware: %s\n", firmware_list[current_firmware_index].name);
+                    const firmware_info_t* fw = &firmware_list[current_firmware_index];
+                    firmware_data = fw->data;
+                    firmware_size = fw->size;
+                    base_address = fw->base_address;
+                    if (fw->has_metadata) {
+                        printf_g("// Programming firmware: %s v%d.%d @ 0x%08X\n",
+                                 fw->name, fw->version_major, fw->version_minor, base_address);
+                    } else {
+                        printf_g("// Programming firmware: %s @ 0x%08X (no metadata)\n",
+                                 fw->name, base_address);
+                    }
                 } else {
                     printf_g("// Invalid index\n");
                 }
 #else
                 firmware_data = fallback_firmware;
                 firmware_size = fallback_firmware_size;
+                base_address = 0;
                 printf_g("// Programming fallback firmware\n");
 #endif
-                
-                success = programFlash(firmware_data, firmware_size);
+
+                success = programFlash(firmware_data, firmware_size, base_address);
                 
                 if (success) {
                     printf_g("// Programming SUCCESSFUL!\n");
@@ -153,8 +163,13 @@ void StateMachine::cycleFirmware() {
     if (firmware_count > 1) {
         current_firmware_index = (current_firmware_index + 1) % firmware_count;
     }
-    printf_g("// Firmware selected: [%d] %s\n", current_firmware_index, 
-             firmware_list[current_firmware_index].name);
+    const firmware_info_t* fw = &firmware_list[current_firmware_index];
+    if (fw->has_metadata) {
+        printf_g("// Firmware selected: [%d] %s v%d.%d\n", current_firmware_index,
+                 fw->name, fw->version_major, fw->version_minor);
+    } else {
+        printf_g("// Firmware selected: [%d] %s\n", current_firmware_index, fw->name);
+    }
 #else
     current_firmware_index = 0;
     printf_g("// Firmware selected: [0] fallback\n");
@@ -181,26 +196,36 @@ bool StateMachine::haltWithTimeout(uint32_t timeout_ms) {
     return true;
 }
 
-bool StateMachine::programFlash(const uint8_t* data, size_t size) {
+bool StateMachine::programFlash(const uint8_t* data, size_t size, uint32_t base_address) {
     if (!data || !size) {
         return false;
     }
 
     printf_g("// Starting flash programming...\n");
-    printf_g("// Firmware size: %d bytes\n", size);
-    
+    printf_g("// Firmware size: %d bytes at base 0x%08X\n", size, base_address);
+
     if (!rv_debug->halt()) {
         printf_g("// ERROR: Could not halt target\n");
         return false;
     }
-    
-    printf_g("// Unlocking and erasing flash...\n");
+
+    printf_g("// Unlocking flash...\n");
     wch_flash->unlock_flash();
-    wch_flash->wipe_chip();
-    
+
+    // Sector-based erasure: only erase sectors being written
+    // CH32V003 has 1024-byte sectors
+    const uint32_t sector_size = wch_flash->get_sector_size();
+    uint32_t first_sector = base_address / sector_size;
+    uint32_t last_sector = (base_address + size - 1) / sector_size;
+
+    printf_g("// Erasing sectors %d to %d...\n", first_sector, last_sector);
+    for (uint32_t sector = first_sector; sector <= last_sector; sector++) {
+        wch_flash->wipe_sector(sector * sector_size);
+    }
+
     size_t aligned_size = (size + 3) & ~3;
     printf_g("// Writing %d bytes to flash (aligned to %d)...\n", size, aligned_size);
-    
+
     uint8_t* aligned_data = (uint8_t*)data;
     bool need_free = false;
     if (size != aligned_size) {
@@ -209,26 +234,26 @@ bool StateMachine::programFlash(const uint8_t* data, size_t size) {
         memset(aligned_data + size, 0xFF, aligned_size - size);
         need_free = true;
     }
-    
-    wch_flash->write_flash(wch_flash->get_flash_base(), aligned_data, aligned_size);
-    
+
+    wch_flash->write_flash(base_address, aligned_data, aligned_size);
+
     printf_g("// Verifying flash...\n");
-    bool success = wch_flash->verify_flash(wch_flash->get_flash_base(), aligned_data, aligned_size);
-    
+    bool success = wch_flash->verify_flash(base_address, aligned_data, aligned_size);
+
     if (need_free) {
         delete[] aligned_data;
     }
-    
+
     if (!success) {
         printf_g("// ERROR: Flash verification failed\n");
-        return false;
+    } else {
+        printf_g("// Flash programming and verification complete\n");
     }
-    
-    printf_g("// Flash programming and verification complete\n");
-    
+
+    // Always clean up: lock flash and reset target
     wch_flash->lock_flash();
     rv_debug->reset();
     rv_debug->resume();
 
-    return true;
+    return success;
 }
