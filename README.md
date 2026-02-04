@@ -14,7 +14,8 @@ PewPewCH32 is designed for developers and manufacturers who need to:
 
 - **Multi-firmware storage**: Store multiple firmware images in RP2040's 2MB flash
 - **No PC required**: Once configured, works as a standalone programmer
-- **Embedded metadata**: Firmware version and load address read directly from binaries
+- **Embedded metadata**: Firmware version, type, and load address read directly from binaries
+- **App header generation**: Automatically generates bootloader app header for APP type firmware
 - **Instant switching**: Select different firmware via button press
 - **Visual feedback**: RGB LED for clear programming status
 
@@ -80,18 +81,27 @@ sudo apt install cmake build-essential git xxd gcc-arm-none-eabi gcc-riscv64-unk
 The programmer loads firmware binaries listed in `firmware.txt`:
 
 ```
-# Format: NAME PATH [LOAD_ADDR]
+# Format: NAME PATH [TYPE]
 #
-# NAME:      Firmware identifier (displayed in menu)
-# PATH:      Relative path to binary file
-# LOAD_ADDR: Optional fallback load address (hex) if no embedded metadata
+# NAME:  Firmware identifier (displayed in menu)
+# PATH:  Relative path to binary file
+# TYPE:  BOOT (default) or APP
+#        BOOT: Standalone firmware, flash at 0x0000, no app header
+#        APP:  Application firmware, flash at 0x0C80, write app header at 0x0C40
 
 bootloader ../emonio-ext/bootloader/bootloader.bin
-blink-bl ../emonio-ext/blink/blink-bl.bin
+blink-bl ../emonio-ext/blink/blink-bl.bin APP
 blink-sa ../emonio-ext/blink/blink-sa.bin
-watchdog-bl ../emonio-ext/watchdog/watchdog-bl.bin
+watchdog-bl ../emonio-ext/watchdog/watchdog-bl.bin APP
 watchdog-sa ../emonio-ext/watchdog/watchdog-sa.bin
 ```
+
+### Firmware Types
+
+| Type | Load Address | App Header | Use Case |
+|------|--------------|------------|----------|
+| **BOOT** | 0x00000000 | No | Bootloader or standalone firmware |
+| **APP** | 0x00000C80 | Yes (auto-generated) | Application firmware for bootloader |
 
 ### Embedded Firmware Metadata
 
@@ -100,30 +110,32 @@ Firmware binaries can embed metadata at offset 0x100 (256 bytes from start):
 ```c
 typedef struct __attribute__((packed)) {
   uint32_t magic;          // 0x5458454B "KEXT" (little-endian)
-  uint32_t load_addr;      // 0x00000000 (standalone) or 0x00000C80 (bootloader)
+  uint32_t load_addr;      // 0x00000000 (BOOT) or 0x00000C80 (APP)
   uint8_t  hw_type;        // Hardware type (0=generic, 4=watchdog)
   uint8_t  version_major;
   uint8_t  version_minor;
-  uint8_t  flags;          // Bit 0: bootloader-compatible
+  uint8_t  flags;          // Bit 0: firmware type (0=BOOT, 1=APP)
   char     name[16];       // Null-terminated firmware name
   uint32_t reserved;
 } fw_metadata_t;  // 32 bytes
 ```
 
 When metadata is present (magic == "KEXT"):
-- Load address, version, and hw_type are read from the binary
-- The `LOAD_ADDR` field in firmware.txt is ignored
+- Type, load address, version, and hw_type are read from the binary
+- The `TYPE` field in firmware.txt is ignored
 
 When metadata is absent:
-- `LOAD_ADDR` from firmware.txt is used (defaults to 0x0)
+- `TYPE` from firmware.txt determines behavior (defaults to BOOT)
 - Version shows as 0.0
 
-### Standalone vs Bootloader-Compatible Firmware
+### App Header Generation
 
-| Mode | Load Address | Metadata | Use Case |
-|------|--------------|----------|----------|
-| **Standalone** (-sa) | 0x00000000 | No | Direct flash, full chip |
-| **Bootloader-compatible** (-bl) | 0x00000C80 | Yes | Works with I2C bootloader |
+When flashing **APP** type firmware, PewPewCH32 automatically:
+1. Flashes the firmware code at 0x0C80
+2. Calculates CRC32 of the firmware data
+3. Generates a valid app header at 0x0C40
+
+This means you can flash bootloader-compatible firmware directly via SWIO without needing I2C updates - the bootloader will recognize and boot the application immediately.
 
 ## Flashing and Usage
 
@@ -157,6 +169,19 @@ screen /dev/ttyACM0 115200
 - **Long press (≥750ms)**: Cycle through available firmware
 - LED shows selected firmware (N+1 blue flashes for index N)
 
+**Serial Selection:**
+
+When the programmer is idle, you can send a single digit (`0`-`9`) over the USB serial console to select and immediately program a firmware entry. The available indices are shown in the menu printed at boot:
+
+```
+// Available firmware:
+//   [0] bootloader
+//   [1] blink-bl
+//   [2] *** WIPE FLASH ***
+```
+
+Sending `1` over serial will select and flash entry `[1]` immediately. Out-of-range digits are rejected with an error message.
+
 ## Status Indicators
 
 **WS2812 RGB LED:**
@@ -167,18 +192,18 @@ screen /dev/ttyACM0 115200
 
 ## Available Firmware
 
-| Firmware | Load Addr | Has Metadata | Description |
-|----------|-----------|--------------|-------------|
-| bootloader | 0x0000 | Yes | I2C bootloader (flash first) |
-| blink-bl | 0x0C80 | Yes | LED blink (bootloader-compatible) |
-| blink-sa | 0x0000 | No | LED blink (standalone) |
-| watchdog-bl | 0x0C80 | Yes | I2C watchdog (bootloader-compatible) |
-| watchdog-sa | 0x0000 | No | I2C watchdog (standalone) |
+| Firmware | Type | Has Metadata | Description |
+|----------|------|--------------|-------------|
+| bootloader | BOOT | Yes | I2C bootloader (flash first) |
+| blink-bl | APP | Yes | LED blink (bootloader-compatible) |
+| blink-sa | BOOT | No | LED blink (standalone) |
+| watchdog-bl | APP | Yes | I2C watchdog (bootloader-compatible) |
+| watchdog-sa | BOOT | No | I2C watchdog (standalone) |
 
 **Typical workflow:**
-1. Flash **bootloader** first (only needed once)
-2. Flash **-bl** variants for devices with bootloader
-3. Use **-sa** variants for devices without bootloader
+1. Flash **bootloader** first (only needed once per device)
+2. Flash **-bl** (APP) variants - app header is auto-generated, bootloader boots them immediately
+3. Use **-sa** (BOOT) variants for devices without bootloader
 
 ## Project Structure
 
@@ -190,9 +215,10 @@ PewPewCH32/
 ├── CMakeLists.txt        # Main CMake configuration
 ├── src/                  # Programmer source code
 │   ├── main.cpp
-│   ├── StateMachine.cpp  # Programming state machine
+│   ├── StateMachine.cpp  # Programming state machine (incl. app header generation)
 │   ├── LedController.cpp # WS2812 LED control
 │   ├── fw_metadata.h     # Firmware metadata structures
+│   ├── crc32.h           # CRC32 for app header generation
 │   └── ...
 ├── picorvd/              # PicoRVD debug interface (cloned)
 ├── pico-sdk/             # Raspberry Pi Pico SDK (cloned)
@@ -205,8 +231,8 @@ Firmware binaries are sourced from the sibling `emonio-ext` directory:
 ```
 ../emonio-ext/
 ├── bootloader/bootloader.bin
-├── blink/blink.bin, blink-bl.bin, blink-sa.bin
-└── watchdog/watchdog.bin, watchdog-bl.bin, watchdog-sa.bin
+├── blink/blink-bl.bin, blink-sa.bin
+└── watchdog/watchdog-bl.bin, watchdog-sa.bin
 ```
 
 ## I2C Bootloader
@@ -223,8 +249,27 @@ The CH32V003 bootloader enables over-the-air updates via I2C.
 0x0C40 ├──────────────────┤
        │   App Header     │  64B (magic, version, CRC, entry)
 0x0C80 ├──────────────────┤
-       │   Application    │  ~12.9KB (updatable via I2C)
+       │   Application    │  ~12.9KB (updatable via I2C or SWIO)
 0x4000 └──────────────────┘
+```
+
+### App Header Structure
+
+The app header at 0x0C40 is generated by PewPewCH32 when flashing APP type firmware:
+
+```c
+typedef struct __attribute__((packed)) {
+  uint32_t magic;           // 0x454D4F57 ("WOME")
+  uint8_t  fw_ver_major;    // From firmware metadata
+  uint8_t  fw_ver_minor;
+  uint8_t  bl_ver_min;      // Minimum bootloader version (1)
+  uint8_t  hw_type;         // From firmware metadata
+  uint32_t app_size;        // Firmware size in bytes
+  uint32_t app_crc32;       // CRC32 of application code
+  uint32_t entry_point;     // Load address (0x0C80)
+  uint32_t header_crc32;    // CRC32 of header bytes 0-23
+  uint8_t  reserved[40];
+} app_header_t;  // 64 bytes
 ```
 
 ### I2C Protocol

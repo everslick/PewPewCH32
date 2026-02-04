@@ -60,6 +60,7 @@ public:
     void stopErrorIndication();
     
     void startFirmwareIndication(int firmware_index);
+    void startWipeIndication();
     void updateFirmwareIndication();
     
     // Main update function
@@ -74,7 +75,8 @@ private:
     led_state_t programming_led;
     led_state_t error_led;
     led_state_t firmware_led;
-    
+    uint8_t indication_r, indication_g, indication_b;
+
     // Helper functions
     void hsvToRgb(float h, float s, float v, uint8_t* r, uint8_t* g, uint8_t* b);
 };

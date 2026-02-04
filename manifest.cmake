@@ -12,6 +12,14 @@ set(FIRMWARE_SOURCES "")
 set(FW_METADATA_MAGIC "0x5458454B")  # "KEXT" in little-endian
 set(FW_METADATA_OFFSET 256)          # 0x100 bytes from start (after vector table)
 
+# Firmware types
+set(FW_TYPE_BOOT 0)
+set(FW_TYPE_APP 1)
+
+# Load addresses (derived from type)
+set(FW_LOAD_ADDR_BOOT "0x00000000")
+set(FW_LOAD_ADDR_APP "0x00000C80")
+
 # Function to read a little-endian uint32 from file at offset
 function(read_le32 FILE_PATH OFFSET OUT_VAR)
     file(READ "${FILE_PATH}" FILE_BYTES OFFSET ${OFFSET} LIMIT 4 HEX)
@@ -114,10 +122,14 @@ function(extract_fw_metadata BINARY_PATH OUT_PREFIX)
     read_byte("${BINARY_PATH}" ${OFFSET} VER_MINOR)
     set(${OUT_PREFIX}_VERSION_MINOR ${VER_MINOR} PARENT_SCOPE)
 
-    # flags at offset +11
+    # flags at offset +11 (contains fw_type in bit 0)
     math(EXPR OFFSET "${FW_METADATA_OFFSET} + 11")
     read_byte("${BINARY_PATH}" ${OFFSET} FLAGS)
     set(${OUT_PREFIX}_FLAGS ${FLAGS} PARENT_SCOPE)
+
+    # Extract fw_type from flags (bit 0)
+    math(EXPR FW_TYPE_VAL "${FLAGS} & 1")
+    set(${OUT_PREFIX}_FW_TYPE ${FW_TYPE_VAL} PARENT_SCOPE)
 
     # name at offset +12 (16 bytes)
     math(EXPR OFFSET "${FW_METADATA_OFFSET} + 12")
@@ -126,7 +138,7 @@ function(extract_fw_metadata BINARY_PATH OUT_PREFIX)
 endfunction()
 
 # Function to add a firmware to the build
-function(add_firmware NAME BINARY_PATH FALLBACK_LOAD_ADDR)
+function(add_firmware NAME BINARY_PATH FALLBACK_TYPE)
     # Add to firmware list
     list(APPEND FIRMWARE_LIST ${NAME})
 
@@ -140,34 +152,43 @@ function(add_firmware NAME BINARY_PATH FALLBACK_LOAD_ADDR)
 
     if(META_HAS_METADATA)
         # Use metadata values
-        set(BASE_ADDRESS "${META_LOAD_ADDR}")
+        set(LOAD_ADDR "${META_LOAD_ADDR}")
         set(HW_TYPE ${META_HW_TYPE})
         set(VERSION_MAJOR ${META_VERSION_MAJOR})
         set(VERSION_MINOR ${META_VERSION_MINOR})
+        set(FW_TYPE ${META_FW_TYPE})
         set(META_NAME "${META_NAME}")
         set(HAS_METADATA TRUE)
-        message(STATUS "Added firmware: ${NAME} with metadata (${META_NAME} v${VERSION_MAJOR}.${VERSION_MINOR} @ ${BASE_ADDRESS})")
+        if(FW_TYPE EQUAL 1)
+            set(TYPE_STR "APP")
+        else()
+            set(TYPE_STR "BOOT")
+        endif()
+        message(STATUS "Added firmware: ${NAME} with metadata (${META_NAME} v${VERSION_MAJOR}.${VERSION_MINOR} ${TYPE_STR} @ ${LOAD_ADDR})")
     else()
         # Fall back to firmware.txt values
-        if("${FALLBACK_LOAD_ADDR}" STREQUAL "")
-            set(BASE_ADDRESS "0x00000000")
+        if("${FALLBACK_TYPE}" STREQUAL "APP")
+            set(FW_TYPE ${FW_TYPE_APP})
+            set(LOAD_ADDR "${FW_LOAD_ADDR_APP}")
         else()
-            set(BASE_ADDRESS "${FALLBACK_LOAD_ADDR}")
+            set(FW_TYPE ${FW_TYPE_BOOT})
+            set(LOAD_ADDR "${FW_LOAD_ADDR_BOOT}")
         endif()
         set(HW_TYPE 0)
         set(VERSION_MAJOR 0)
         set(VERSION_MINOR 0)
         set(META_NAME "")
         set(HAS_METADATA FALSE)
-        message(STATUS "Added firmware: ${NAME} (${BINARY_PATH} @ ${BASE_ADDRESS}) - no metadata")
+        message(STATUS "Added firmware: ${NAME} (${BINARY_PATH} @ ${LOAD_ADDR} ${FALLBACK_TYPE}) - no metadata")
     endif()
 
     # Set variables for this firmware
     set(FIRMWARE_${NAME}_BINARY_PATH ${BINARY_PATH} CACHE INTERNAL "")
-    set(FIRMWARE_${NAME}_BASE_ADDRESS ${BASE_ADDRESS} CACHE INTERNAL "")
+    set(FIRMWARE_${NAME}_LOAD_ADDR ${LOAD_ADDR} CACHE INTERNAL "")
     set(FIRMWARE_${NAME}_HW_TYPE ${HW_TYPE} CACHE INTERNAL "")
     set(FIRMWARE_${NAME}_VERSION_MAJOR ${VERSION_MAJOR} CACHE INTERNAL "")
     set(FIRMWARE_${NAME}_VERSION_MINOR ${VERSION_MINOR} CACHE INTERNAL "")
+    set(FIRMWARE_${NAME}_FW_TYPE ${FW_TYPE} CACHE INTERNAL "")
     set(FIRMWARE_${NAME}_HAS_METADATA ${HAS_METADATA} CACHE INTERNAL "")
     set(FIRMWARE_${NAME}_META_NAME "${META_NAME}" CACHE INTERNAL "")
 
@@ -192,7 +213,7 @@ function(load_firmware_manifest)
         string(REGEX MATCH "^[ \t]*$" IS_EMPTY ${LINE})
 
         if(NOT IS_COMMENT AND NOT IS_EMPTY)
-            # Parse the line: NAME PATH [LOAD_ADDR]
+            # Parse the line: NAME PATH [TYPE]
             string(REGEX REPLACE "[ \t]+" ";" LINE_PARTS ${LINE})
             list(LENGTH LINE_PARTS NUM_PARTS)
 
@@ -200,17 +221,19 @@ function(load_firmware_manifest)
                 list(GET LINE_PARTS 0 FW_NAME)
                 list(GET LINE_PARTS 1 FW_PATH)
 
-                # Optional 3rd field is fallback load address (hex, e.g. 0x0C80)
-                set(FW_LOAD_ADDR "")
+                # Optional 3rd field is TYPE (BOOT or APP, defaults to BOOT)
+                set(FW_TYPE "BOOT")
                 if(NUM_PARTS GREATER_EQUAL 3)
                     list(GET LINE_PARTS 2 FIELD3)
-                    set(FW_LOAD_ADDR "${FIELD3}")
+                    if("${FIELD3}" STREQUAL "APP")
+                        set(FW_TYPE "APP")
+                    endif()
                 endif()
 
                 # Check if the binary exists
                 set(BINARY_PATH ${FIRMWARE_BASE_DIR}/${FW_PATH})
                 if(EXISTS ${BINARY_PATH})
-                    add_firmware(${FW_NAME} ${FW_PATH} "${FW_LOAD_ADDR}")
+                    add_firmware(${FW_NAME} ${FW_PATH} "${FW_TYPE}")
                 else()
                     message(WARNING "Firmware binary not found: ${BINARY_PATH}")
                 endif()
@@ -270,18 +293,21 @@ function(build_firmware_inventory TARGET_NAME)
     set(INVENTORY_HEADER ${CMAKE_CURRENT_BINARY_DIR}/src/firmware_inventory.h)
     set(INVENTORY_SOURCE ${CMAKE_CURRENT_BINARY_DIR}/src/firmware_inventory.c)
 
-    set(HEADER_CONTENT "// Generated firmware inventory\n#pragma once\n\n#include <stdint.h>\n#include <stdbool.h>\n\n")
-    set(SOURCE_CONTENT "// Generated firmware inventory\n#include \"firmware_inventory.h\"\n\n")
+    set(HEADER_CONTENT "// Generated firmware inventory\\n#pragma once\\n\\n#include <stdint.h>\\n#include <stdbool.h>\\n\\n")
+    set(SOURCE_CONTENT "// Generated firmware inventory\\n#include \"firmware_inventory.h\"\\n\\n")
 
     foreach(FIRMWARE ${FIRMWARE_LIST})
         string(REGEX REPLACE "[^a-zA-Z0-9_]" "_" FIRMWARE_SAFE ${FIRMWARE})
-        set(HEADER_CONTENT "${HEADER_CONTENT}extern const unsigned char firmware_${FIRMWARE_SAFE}_bin[];\nextern const unsigned int firmware_${FIRMWARE_SAFE}_bin_len;\n\n")
-        set(SOURCE_CONTENT "${SOURCE_CONTENT}#include \"firmware_${FIRMWARE_SAFE}.h\"\n")
+        set(HEADER_CONTENT "${HEADER_CONTENT}extern const unsigned char firmware_${FIRMWARE_SAFE}_bin[];\\nextern const unsigned int firmware_${FIRMWARE_SAFE}_bin_len;\\n\\n")
+        set(SOURCE_CONTENT "${SOURCE_CONTENT}#include \"firmware_${FIRMWARE_SAFE}.h\"\\n")
     endforeach()
 
-    set(HEADER_CONTENT "${HEADER_CONTENT}typedef struct {\n    const char* name;\n    const unsigned char* data;\n    unsigned int size;\n    uint32_t base_address;\n    uint8_t  hw_type;\n    uint8_t  version_major;\n    uint8_t  version_minor;\n    bool     has_metadata;\n} firmware_info_t;\n\nextern const firmware_info_t firmware_list[];\nextern const int firmware_count;\n")
+    # Firmware type enum
+    set(HEADER_CONTENT "${HEADER_CONTENT}// Firmware types\\n#define FW_TYPE_BOOT 0  // Standalone: flash at load_addr, no app header\\n#define FW_TYPE_APP  1  // Application: flash at load_addr, write app header\\n\\n")
 
-    set(SOURCE_CONTENT "${SOURCE_CONTENT}\nconst firmware_info_t firmware_list[] = {\n")
+    set(HEADER_CONTENT "${HEADER_CONTENT}typedef struct {\\n    const char* name;\\n    const unsigned char* data;\\n    unsigned int size;\\n    uint32_t load_addr;\\n    uint8_t  hw_type;\\n    uint8_t  version_major;\\n    uint8_t  version_minor;\\n    uint8_t  fw_type;       // FW_TYPE_BOOT or FW_TYPE_APP\\n    bool     has_metadata;\\n} firmware_info_t;\\n\\nextern const firmware_info_t firmware_list[];\\nextern const int firmware_count;\\n")
+
+    set(SOURCE_CONTENT "${SOURCE_CONTENT}\\nconst firmware_info_t firmware_list[] = {\\n")
     foreach(FIRMWARE ${FIRMWARE_LIST})
         string(REGEX REPLACE "[^a-zA-Z0-9_]" "_" FIRMWARE_SAFE ${FIRMWARE})
         file(SIZE ${FIRMWARE_${FIRMWARE}_BINARY_PATH} FIRMWARE_FILE_SIZE)
@@ -290,9 +316,9 @@ function(build_firmware_inventory TARGET_NAME)
         else()
             set(HAS_META_STR "false")
         endif()
-        set(SOURCE_CONTENT "${SOURCE_CONTENT}    {\"${FIRMWARE}\", firmware_${FIRMWARE_SAFE}_bin, ${FIRMWARE_FILE_SIZE}, ${FIRMWARE_${FIRMWARE}_BASE_ADDRESS}, ${FIRMWARE_${FIRMWARE}_HW_TYPE}, ${FIRMWARE_${FIRMWARE}_VERSION_MAJOR}, ${FIRMWARE_${FIRMWARE}_VERSION_MINOR}, ${HAS_META_STR}},\n")
+        set(SOURCE_CONTENT "${SOURCE_CONTENT}    {\"${FIRMWARE}\", firmware_${FIRMWARE_SAFE}_bin, ${FIRMWARE_FILE_SIZE}, ${FIRMWARE_${FIRMWARE}_LOAD_ADDR}, ${FIRMWARE_${FIRMWARE}_HW_TYPE}, ${FIRMWARE_${FIRMWARE}_VERSION_MAJOR}, ${FIRMWARE_${FIRMWARE}_VERSION_MINOR}, ${FIRMWARE_${FIRMWARE}_FW_TYPE}, ${HAS_META_STR}},\\n")
     endforeach()
-    set(SOURCE_CONTENT "${SOURCE_CONTENT}};\n\nconst int firmware_count = sizeof(firmware_list) / sizeof(firmware_list[0]);\n")
+    set(SOURCE_CONTENT "${SOURCE_CONTENT}};\\n\\nconst int firmware_count = sizeof(firmware_list) / sizeof(firmware_list[0]);\\n")
 
     string(REPLACE "\\n" "\n" HEADER_CONTENT_FORMATTED "${HEADER_CONTENT}")
     string(REPLACE "\\n" "\n" SOURCE_CONTENT_FORMATTED "${SOURCE_CONTENT}")

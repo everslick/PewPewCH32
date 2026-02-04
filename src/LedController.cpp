@@ -216,6 +216,17 @@ void LedController::startFirmwareIndication(int firmware_index) {
     firmware_led.flash_on = false;
     firmware_led.flashes_done = 0;
     firmware_led.flash_duration_ms = 100;
+    indication_r = 0; indication_g = 0; indication_b = 255;  // Blue
+}
+
+void LedController::startWipeIndication() {
+    firmware_led.active = true;
+    firmware_led.flash_count = 3;
+    firmware_led.timer = to_ms_since_boot(get_absolute_time());
+    firmware_led.flash_on = false;
+    firmware_led.flashes_done = 0;
+    firmware_led.flash_duration_ms = 100;
+    indication_r = 255; indication_g = 0; indication_b = 0;  // Red
 }
 
 void LedController::updateFirmwareIndication() {
@@ -225,10 +236,12 @@ void LedController::updateFirmwareIndication() {
     if ((now - firmware_led.timer) >= firmware_led.flash_duration_ms) {
         firmware_led.flash_on = !firmware_led.flash_on;
         if (firmware_led.flash_on) {
-            setRgbColor(0, 0, 255);  // Blue flash
+            setRgbColor(indication_r, indication_g, indication_b);
+            if (indication_r > 0 && indication_b == 0) setRedLed(true);
             firmware_led.flashes_done++;
         } else {
             rgbOff();
+            setRedLed(false);
             if (firmware_led.flashes_done >= firmware_led.flash_count) {
                 firmware_led.active = false;
                 firmware_led.flashes_done = 0;

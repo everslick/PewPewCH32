@@ -124,14 +124,41 @@ int main() {
                     printf_g("// Checking target...\n");
                     state_machine->startProgramming();
                     break;
-                    
+
                 case InputHandler::BUTTON_LONG_PRESS:
                     buzzer->beepWarning();
                     state_machine->cycleFirmware();
                     break;
-                    
+
                 default:
                     break;
+            }
+
+            // Check for UART firmware selection
+            int c = getchar_timeout_us(0);
+            if (c != PICO_ERROR_TIMEOUT && c >= '0' && c <= '9') {
+                int index = c - '0';
+#ifdef FIRMWARE_INVENTORY_ENABLED
+                int max_index = firmware_count; // firmware_count = last valid index (wipe)
+#else
+                int max_index = 0;
+#endif
+                if (index <= max_index) {
+                    state_machine->setCurrentFirmwareIndex(index);
+#ifdef FIRMWARE_INVENTORY_ENABLED
+                    if (index == firmware_count) {
+                        printf_g("// UART selected [%d] *** WIPE FLASH ***\n", index);
+                    } else {
+                        printf_g("// UART selected [%d] %s\n", index, firmware_list[index].name);
+                    }
+#else
+                    printf_g("// UART selected [%d] fallback firmware\n", index);
+#endif
+                    buzzer->beepStart();
+                    state_machine->startProgramming();
+                } else {
+                    printf_g("// Invalid selection [%d], valid range is 0-%d\n", index, max_index);
+                }
             }
         }
         
@@ -185,6 +212,7 @@ void list_firmware() {
     for (int i = 0; i < firmware_count; i++) {
         printf_g("//   [%d] %s\n", i, firmware_list[i].name);
     }
+    printf_g("//   [%d] *** WIPE FLASH ***\n", firmware_count);
 #else
     printf_g("//   [0] fallback (built-in minimal firmware)\n");
 #endif
