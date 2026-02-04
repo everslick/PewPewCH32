@@ -59,12 +59,12 @@ void StateMachine::setState(SystemState state) {
             break;
         case STATE_CYCLING_FIRMWARE:
 #ifdef FIRMWARE_INVENTORY_ENABLED
-            if (current_firmware_index == firmware_count) {
+            if (current_firmware_index == 0) {
                 led_controller->startWipeIndication();
             } else
 #endif
             {
-                led_controller->startFirmwareIndication(current_firmware_index);
+                led_controller->startFirmwareIndication(current_firmware_index - 1);
             }
             break;
         default:
@@ -92,10 +92,10 @@ void StateMachine::process() {
 
                 // Select firmware to program (or wipe)
 #ifdef FIRMWARE_INVENTORY_ENABLED
-                if (current_firmware_index == firmware_count) {
+                if (current_firmware_index == 0) {
                     success = wipeChip();
-                } else if (current_firmware_index < firmware_count) {
-                    const firmware_info_t* fw = &firmware_list[current_firmware_index];
+                } else if (current_firmware_index <= firmware_count) {
+                    const firmware_info_t* fw = &firmware_list[current_firmware_index - 1];
                     const char* type_str = (fw->fw_type == FW_TYPE_APP) ? "APP" : "BOOT";
                     if (fw->has_metadata) {
                         printf_g("// Programming firmware: %s v%d.%d (%s @ 0x%08lX)\n",
@@ -115,10 +115,10 @@ void StateMachine::process() {
 #endif
 
                 if (success) {
-                    printf_g("// Programming SUCCESSFUL!\n");
+                    printf_g("// Programming SUCCESSFUL!\n\n");
                     setState(STATE_SUCCESS);
                 } else {
-                    printf_g("// Programming FAILED!\n");
+                    printf_g("// Programming FAILED!\n\n");
                     setState(STATE_ERROR);
                 }
             }
@@ -164,12 +164,12 @@ void StateMachine::startTargetCheck() {
 
 void StateMachine::cycleFirmware() {
 #ifdef FIRMWARE_INVENTORY_ENABLED
-    // Cycle through firmware entries + one extra "Wipe Flash" entry
+    // Cycle through: [0] WIPE FLASH, [1..firmware_count] firmware entries
     current_firmware_index = (current_firmware_index + 1) % (firmware_count + 1);
-    if (current_firmware_index == firmware_count) {
-        printf_g("// Selected: [%d] *** WIPE FLASH ***\n", current_firmware_index);
+    if (current_firmware_index == 0) {
+        printf_g("// Selected: [0] WIPE FLASH\n");
     } else {
-        const firmware_info_t* fw = &firmware_list[current_firmware_index];
+        const firmware_info_t* fw = &firmware_list[current_firmware_index - 1];
         if (fw->has_metadata) {
             printf_g("// Firmware selected: [%d] %s v%d.%d\n", current_firmware_index,
                      fw->name, fw->version_major, fw->version_minor);
@@ -266,7 +266,7 @@ bool StateMachine::programFlash(const uint8_t* data, size_t size, uint32_t base_
 }
 
 bool StateMachine::wipeChip() {
-    printf_g("// *** WIPING ENTIRE FLASH ***\n");
+    printf_g("// WIPING ENTIRE FLASH\n");
 
     if (!rv_debug->halt()) {
         printf_g("// ERROR: Could not halt target\n");
@@ -276,7 +276,6 @@ bool StateMachine::wipeChip() {
     wch_flash->unlock_flash();
     printf_g("// Erasing all 16KB flash (MER)...\n");
     wch_flash->wipe_chip();
-    printf_g("// Flash erased\n");
 
     wch_flash->lock_flash();
     rv_debug->reset();

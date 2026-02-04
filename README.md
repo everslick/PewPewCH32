@@ -167,7 +167,7 @@ screen /dev/ttyACM0 115200
 **BOOTSEL Button Controls:**
 - **Short press (<250ms)**: Program selected firmware to CH32V003
 - **Long press (≥750ms)**: Cycle through available firmware
-- LED shows selected firmware (N+1 blue flashes for index N)
+- LED shows selected firmware (N blue flashes for index N)
 
 **Serial Selection:**
 
@@ -175,9 +175,9 @@ When the programmer is idle, you can send a single digit (`0`-`9`) over the USB 
 
 ```
 // Available firmware:
-//   [0] bootloader
-//   [1] blink-bl
-//   [2] *** WIPE FLASH ***
+//   [0] WIPE FLASH
+//   [1] bootloader
+//   [2] blink
 ```
 
 Sending `1` over serial will select and flash entry `[1]` immediately. Out-of-range digits are rejected with an error message.
@@ -187,7 +187,7 @@ Sending `1` over serial will select and flash entry `[1]` immediately. Out-of-ra
 **WS2812 RGB LED:**
 - **Rainbow fade**: Startup animation (3 seconds)
 - **Green pulse**: System ready (flash every 3 seconds)
-- **Blue flashes**: Firmware selection (count = firmware index + 1)
+- **Blue flashes**: Firmware selection (count = firmware index)
 - **Red solid**: Error state (2 seconds)
 
 ## Available Firmware

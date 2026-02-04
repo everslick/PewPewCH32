@@ -139,17 +139,17 @@ int main() {
             if (c != PICO_ERROR_TIMEOUT && c >= '0' && c <= '9') {
                 int index = c - '0';
 #ifdef FIRMWARE_INVENTORY_ENABLED
-                int max_index = firmware_count; // firmware_count = last valid index (wipe)
+                int max_index = firmware_count; // [0]=wipe, [1..firmware_count]=firmware
 #else
                 int max_index = 0;
 #endif
                 if (index <= max_index) {
                     state_machine->setCurrentFirmwareIndex(index);
 #ifdef FIRMWARE_INVENTORY_ENABLED
-                    if (index == firmware_count) {
-                        printf_g("// UART selected [%d] *** WIPE FLASH ***\n", index);
+                    if (index == 0) {
+                        printf_g("// UART selected [0] WIPE FLASH\n");
                     } else {
-                        printf_g("// UART selected [%d] %s\n", index, firmware_list[index].name);
+                        printf_g("// UART selected [%d] %s\n", index, firmware_list[index - 1].name);
                     }
 #else
                     printf_g("// UART selected [%d] fallback firmware\n", index);
@@ -209,10 +209,10 @@ void print_header() {
 void list_firmware() {
     printf_g("// Available firmware:\n");
 #ifdef FIRMWARE_INVENTORY_ENABLED
+    printf_g("//   [0] WIPE FLASH\n");
     for (int i = 0; i < firmware_count; i++) {
-        printf_g("//   [%d] %s\n", i, firmware_list[i].name);
+        printf_g("//   [%d] %s\n", i + 1, firmware_list[i].name);
     }
-    printf_g("//   [%d] *** WIPE FLASH ***\n", firmware_count);
 #else
     printf_g("//   [0] fallback (built-in minimal firmware)\n");
 #endif
