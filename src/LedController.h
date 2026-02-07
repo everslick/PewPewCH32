@@ -61,6 +61,7 @@ public:
     
     void startFirmwareIndication(int firmware_index);
     void startWipeIndication();
+    void startRebootIndication();
     void updateFirmwareIndication();
     
     // Main update function

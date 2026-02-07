@@ -61,6 +61,8 @@ void StateMachine::setState(SystemState state) {
 #ifdef FIRMWARE_INVENTORY_ENABLED
             if (current_firmware_index == 0) {
                 led_controller->startWipeIndication();
+            } else if (current_firmware_index == 9) {
+                led_controller->startRebootIndication();
             } else
 #endif
             {
@@ -90,10 +92,12 @@ void StateMachine::process() {
             {
                 bool success = false;
 
-                // Select firmware to program (or wipe)
+                // Select firmware to program (or wipe/reboot)
 #ifdef FIRMWARE_INVENTORY_ENABLED
                 if (current_firmware_index == 0) {
                     success = wipeChip();
+                } else if (current_firmware_index == 9) {
+                    success = rebootChip();
                 } else if (current_firmware_index <= firmware_count) {
                     const firmware_info_t* fw = &firmware_list[current_firmware_index - 1];
                     const char* type_str = (fw->fw_type == FW_TYPE_APP) ? "APP" : "BOOT";
@@ -115,10 +119,10 @@ void StateMachine::process() {
 #endif
 
                 if (success) {
-                    printf_g("// Programming SUCCESSFUL!\n\n");
+                    printf_g("// SUCCESS!\n\n");
                     setState(STATE_SUCCESS);
                 } else {
-                    printf_g("// Programming FAILED!\n\n");
+                    printf_g("// ERROR!\n\n");
                     setState(STATE_ERROR);
                 }
             }
@@ -164,10 +168,18 @@ void StateMachine::startTargetCheck() {
 
 void StateMachine::cycleFirmware() {
 #ifdef FIRMWARE_INVENTORY_ENABLED
-    // Cycle through: [0] WIPE FLASH, [1..firmware_count] firmware entries
-    current_firmware_index = (current_firmware_index + 1) % (firmware_count + 1);
+    // Cycle through: [0] WIPE FLASH, [1..firmware_count] firmware entries, [9] REBOOT
+    if (current_firmware_index == 9) {
+        current_firmware_index = 0;
+    } else if (current_firmware_index >= firmware_count) {
+        current_firmware_index = 9;
+    } else {
+        current_firmware_index++;
+    }
     if (current_firmware_index == 0) {
         printf_g("// Selected: [0] WIPE FLASH\n");
+    } else if (current_firmware_index == 9) {
+        printf_g("// Selected: [9] REBOOT\n");
     } else {
         const firmware_info_t* fw = &firmware_list[current_firmware_index - 1];
         if (fw->has_metadata) {
@@ -285,6 +297,16 @@ bool StateMachine::wipeChip() {
     return true;
 }
 
+bool StateMachine::rebootChip() {
+    printf_g("// REBOOTING TARGET\n");
+
+    rv_debug->reset();
+    rv_debug->resume();
+
+    printf_g("// Target rebooted\n");
+    return true;
+}
+
 #ifdef FIRMWARE_INVENTORY_ENABLED
 bool StateMachine::programFirmware(const firmware_info_t* fw) {
     if (!fw || !fw->data || !fw->size) {
@@ -309,8 +331,8 @@ bool StateMachine::programFirmware(const firmware_info_t* fw) {
         header.app_size = fw->size;
         header.entry_point = fw->load_addr;
         header.app_crc32 = crc32(fw->data, fw->size);
-        // CRC of first 24 bytes with header_crc32 = 0 (it's already 0 from memset)
-        header.header_crc32 = crc32(&header, 24);
+        // CRC of first 20 bytes (excludes header_crc32 field itself)
+        header.header_crc32 = crc32(&header, 20);
 
         printf_g("// App CRC32: 0x%08lX, Header CRC32: 0x%08lX\n",
                  (unsigned long)header.app_crc32, (unsigned long)header.header_crc32);
@@ -391,7 +413,7 @@ bool StateMachine::writeAppHeader(const firmware_info_t* fw) {
     app_header_t header;
     memset(&header, 0, sizeof(header));
 
-    header.magic = APP_HEADER_MAGIC;  // "WOME"
+    header.magic = APP_HEADER_MAGIC;  // "XAPP"
     header.fw_ver_major = fw->version_major;
     header.fw_ver_minor = fw->version_minor;
     header.bl_ver_min = 1;  // Require bootloader v1.0+
@@ -403,8 +425,8 @@ bool StateMachine::writeAppHeader(const firmware_info_t* fw) {
     header.app_crc32 = crc32(fw->data, fw->size);
     printf_g("// App CRC32: 0x%08lX\n", (unsigned long)header.app_crc32);
 
-    // Calculate CRC32 of header (first 24 bytes)
-    header.header_crc32 = crc32(&header, 24);
+    // Calculate CRC32 of header (first 20 bytes, excludes header_crc32 itself)
+    header.header_crc32 = crc32(&header, 20);
     printf_g("// Header CRC32: 0x%08lX\n", (unsigned long)header.header_crc32);
 
     printf_g("// Writing app header at 0x%08X (%d bytes)...\n",

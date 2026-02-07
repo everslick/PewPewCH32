@@ -27,15 +27,15 @@
 
 // Load addresses (derived from type)
 #define FW_LOAD_ADDR_BOOT     0x00000000  // BOOT type loads at 0x0000
-#define FW_LOAD_ADDR_APP      0x00000C80  // APP type loads at 0x0C80
+#define FW_LOAD_ADDR_APP      0x00001080  // APP type loads at 0x1080 (after 4KB bootloader)
 
 // App header address (for APP type firmware)
-#define FW_APP_HEADER_ADDR    0x00000C40
+#define FW_APP_HEADER_ADDR    0x00001040  // App header at 0x1040 (page 65)
 
 // Firmware metadata structure (32 bytes)
 typedef struct __attribute__((packed)) {
   uint32_t magic;          // 0x5458454B "KEXT" (little-endian)
-  uint32_t load_addr;      // Load address (0x0000 for BOOT, 0x0C80 for APP)
+  uint32_t load_addr;      // Load address (0x0000 for BOOT, 0x1080 for APP)
   uint8_t  hw_type;        // Hardware/extension type (0=generic, 4=watchdog, etc.)
   uint8_t  version_major;  // Firmware major version
   uint8_t  version_minor;  // Firmware minor version
@@ -44,19 +44,19 @@ typedef struct __attribute__((packed)) {
   uint32_t reserved;       // Reserved for future use
 } fw_metadata_t;
 
-// App header structure (64 bytes at 0x0C40) - must match bootloader's app_header_t
-#define APP_HEADER_MAGIC      0x454D4F57  // "WOME" in little-endian
+// App header structure (64 bytes at 0x1040) - must match bootloader's app_header_t
+#define APP_HEADER_MAGIC      0x50504158  // "XAPP" in little-endian
 
 typedef struct __attribute__((packed)) {
-  uint32_t magic;           // 0x454D4F57 ("WOME")
+  uint32_t magic;           // 0x50504158 ("XAPP")
   uint8_t  fw_ver_major;    // Firmware major version
   uint8_t  fw_ver_minor;    // Firmware minor version
   uint8_t  bl_ver_min;      // Minimum bootloader version required
   uint8_t  hw_type;         // Hardware type (must match, or 0 for generic)
   uint32_t app_size;        // Application code size in bytes
   uint32_t app_crc32;       // CRC32 of application code
-  uint32_t entry_point;     // Entry address (typically 0x0C80)
-  uint32_t header_crc32;    // CRC32 of header bytes 0-23
+  uint32_t entry_point;     // Entry address (typically 0x1080)
+  uint32_t header_crc32;    // CRC32 of header bytes 0-19
   uint8_t  reserved[40];    // Reserved for future use (pad to 64 bytes)
 } app_header_t;
 

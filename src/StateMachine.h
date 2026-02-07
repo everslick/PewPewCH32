@@ -58,6 +58,7 @@ private:
 #endif
     bool programFlash(const uint8_t* data, size_t size, uint32_t base_address);
     bool wipeChip();
+    bool rebootChip();
 };
 
 #endif // STATE_MACHINE_H
