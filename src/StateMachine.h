@@ -54,7 +54,6 @@ private:
     bool haltWithTimeout(uint32_t timeout_ms);
 #ifdef FIRMWARE_INVENTORY_ENABLED
     bool programFirmware(const firmware_info_t* fw);
-    bool writeAppHeader(const firmware_info_t* fw);
 #endif
     bool programFlash(const uint8_t* data, size_t size, uint32_t base_address);
     bool wipeChip();
