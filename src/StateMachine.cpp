@@ -1,4 +1,5 @@
 #include "StateMachine.h"
+#include "DisplayController.h"
 #include <stdio.h>
 #include <string.h>
 #include "pico/stdlib.h"
@@ -11,10 +12,11 @@
   extern const size_t  fallback_firmware_size;
 #endif
 
-StateMachine::StateMachine(LedController* led, RVDebug* rvd, WCHFlash* flash) 
+StateMachine::StateMachine(LedController* led, RVDebug* rvd, WCHFlash* flash)
     : state_timer(0),
       current_firmware_index(0),
       led_controller(led),
+      display_controller(nullptr),
       rv_debug(rvd),
       wch_flash(flash) {
     // Initialize to IDLE state properly (triggers state entry actions)
@@ -69,6 +71,11 @@ void StateMachine::setState(SystemState state) {
             break;
         default:
             break;
+    }
+
+    // Notify display
+    if (display_controller) {
+        display_controller->setSystemState(state);
     }
 }
 
@@ -180,7 +187,37 @@ void StateMachine::cycleFirmware() {
     printf_g("// Firmware selected: [0] fallback\n");
 #endif
 
+    // Notify display
+    if (display_controller) {
+        display_controller->setMenuEntry(getCurrentMenuName());
+    }
+
     setState(STATE_CYCLING_FIRMWARE);
+}
+
+const char* StateMachine::getStateName(SystemState state) {
+    switch (state) {
+        case STATE_IDLE:             return "READY";
+        case STATE_CHECKING_TARGET:  return "CHECKING...";
+        case STATE_PROGRAMMING:      return "PROGRAMMING...";
+        case STATE_SUCCESS:          return "SUCCESS";
+        case STATE_ERROR:            return "ERROR";
+        case STATE_CYCLING_FIRMWARE: return "SELECTING...";
+        default:                     return "UNKNOWN";
+    }
+}
+
+const char* StateMachine::getCurrentMenuName() const {
+#ifdef FIRMWARE_INVENTORY_ENABLED
+    if (current_firmware_index == 0) return "WIPE FLASH";
+    if (current_firmware_index == 9) return "REBOOT";
+    if (current_firmware_index >= 1 && current_firmware_index <= firmware_count) {
+        return firmware_list[current_firmware_index - 1].name;
+    }
+    return "???";
+#else
+    return "fallback";
+#endif
 }
 
 bool StateMachine::haltWithTimeout(uint32_t timeout_ms) {

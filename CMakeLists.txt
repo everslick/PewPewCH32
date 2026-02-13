@@ -41,6 +41,8 @@ add_executable(PewPewCH32
     src/StateMachine.cpp
     src/BuzzerController.cpp
     src/InputHandler.cpp
+    src/Settings.cpp
+    src/DisplayController.cpp
 )
 
 # Include directories
@@ -67,7 +69,13 @@ target_link_libraries(PewPewCH32
     hardware_pio
     hardware_pwm
     hardware_clocks
+    hardware_i2c
+    hardware_flash
+    pico_flash
 )
+
+# Flash safety: single-core, no need for core1 lockout
+target_compile_definitions(PewPewCH32 PRIVATE PICO_FLASH_ASSUME_CORE1_SAFE=1)
 
 # Enable USB output, disable UART output
 pico_enable_stdio_usb(PewPewCH32 1)

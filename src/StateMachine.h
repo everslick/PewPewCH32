@@ -6,6 +6,8 @@
 #include "RVDebug.h"
 #include "WCHFlash.h"
 
+class DisplayController;
+
 #ifdef FIRMWARE_INVENTORY_ENABLED
   #include "firmware_inventory.h"
 #endif
@@ -37,9 +39,14 @@ public:
     void startTargetCheck();
     void cycleFirmware();
     
+    // Display integration
+    void setDisplayController(DisplayController* dc) { display_controller = dc; }
+
     // Configuration
     void setCurrentFirmwareIndex(int index) { current_firmware_index = index; }
     int getCurrentFirmwareIndex() const { return current_firmware_index; }
+    const char* getCurrentMenuName() const;
+    static const char* getStateName(SystemState state);
     
 private:
     SystemState current_state;
@@ -47,6 +54,7 @@ private:
     int current_firmware_index;
     
     LedController* led_controller;
+    DisplayController* display_controller;
     RVDebug* rv_debug;
     WCHFlash* wch_flash;
     
