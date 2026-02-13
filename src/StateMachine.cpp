@@ -98,14 +98,8 @@ void StateMachine::process() {
                     success = rebootChip();
                 } else if (current_firmware_index <= firmware_count) {
                     const firmware_info_t* fw = &firmware_list[current_firmware_index - 1];
-                    if (fw->has_metadata) {
-                        printf_g("// Programming firmware: %s v%d.%d (@ 0x%08lX)\n",
-                                 fw->name, fw->version_major, fw->version_minor,
-                                 (unsigned long)fw->load_addr);
-                    } else {
-                        printf_g("// Programming firmware: %s (@ 0x%08lX)\n",
-                                 fw->name, (unsigned long)fw->load_addr);
-                    }
+                    printf_g("// Programming firmware: %s (@ 0x%08lX)\n",
+                             fw->name, (unsigned long)fw->load_addr);
                     success = programFirmware(fw);
                 } else {
                     printf_g("// Invalid index\n");
@@ -179,12 +173,7 @@ void StateMachine::cycleFirmware() {
         printf_g("// Selected: [9] REBOOT\n");
     } else {
         const firmware_info_t* fw = &firmware_list[current_firmware_index - 1];
-        if (fw->has_metadata) {
-            printf_g("// Firmware selected: [%d] %s v%d.%d\n", current_firmware_index,
-                     fw->name, fw->version_major, fw->version_minor);
-        } else {
-            printf_g("// Firmware selected: [%d] %s\n", current_firmware_index, fw->name);
-        }
+        printf_g("// Firmware selected: [%d] %s\n", current_firmware_index, fw->name);
     }
 #else
     current_firmware_index = 0;
