@@ -205,7 +205,7 @@ void DisplayController::init(bool flipped) {
     last_activity_ms = to_ms_since_boot(get_absolute_time());
 
     // Initial content
-    snprintf(info_line, sizeof(info_line), "PewPewCH32 V%s", PROGRAMMER_VERSION);
+    snprintf(info_line, sizeof(info_line), "PewPewCH32 %s", PROGRAMMER_VERSION);
 
     needs_redraw = true;
 }
@@ -265,7 +265,28 @@ void DisplayController::drawStringInverted(int x, int y, const char* str) {
         if (c < 32 || c > 126) { cx += FONT_WIDTH; str++; continue; }
         const uint8_t* glyph = font_8x8[c - 32];
         for (int col = 0; col < FONT_WIDTH; col++) {
-            framebuffer[page * DISPLAY_WIDTH + cx + col] = ~transposeColumn(glyph, col);
+            framebuffer[page * DISPLAY_WIDTH + cx + col] = ~(transposeColumn(glyph, col) << 1);
+        }
+        cx += FONT_WIDTH;
+        str++;
+    }
+}
+
+void DisplayController::drawStringPixel(int x, int y, const char* str) {
+    int page = y / 8;
+    int bit_offset = y % 8;
+    int cx = x;
+    while (*str) {
+        if (cx + FONT_WIDTH > DISPLAY_WIDTH) break;
+        char c = *str;
+        if (c < 32 || c > 126) c = '?';
+        const uint8_t* glyph = font_8x8[c - 32];
+        for (int col = 0; col < FONT_WIDTH; col++) {
+            uint8_t col_byte = transposeColumn(glyph, col);
+            if (page < DISPLAY_PAGES)
+                framebuffer[page * DISPLAY_WIDTH + cx + col] |= (col_byte << bit_offset);
+            if (bit_offset > 0 && (page + 1) < DISPLAY_PAGES)
+                framebuffer[(page + 1) * DISPLAY_WIDTH + cx + col] |= (col_byte >> (8 - bit_offset));
         }
         cx += FONT_WIDTH;
         str++;
@@ -283,11 +304,12 @@ void DisplayController::render() {
         drawStringInverted(x, 0, menu_line);
     }
 
-    // Line 1 (y=8): blank separator
+    // Filled pixel row below menu bar (y=8)
+    memset(framebuffer + 1 * DISPLAY_WIDTH, 0x01, DISPLAY_WIDTH);
 
-    // Line 2 (y=16): System state
+    // Line 2 (y=13): System state
     if (state_line[0]) {
-        drawString(0, 16, state_line);
+        drawStringPixel(0, 13, state_line);
     }
 
     // Line 3 (y=24): Version / contextual info
@@ -349,7 +371,7 @@ void DisplayController::setSystemState(SystemState state) {
             snprintf(info_line, sizeof(info_line), "Check cable!");
             break;
         default:
-            snprintf(info_line, sizeof(info_line), "PewPewCH32 V%s", PROGRAMMER_VERSION);
+            snprintf(info_line, sizeof(info_line), "PewPewCH32 %s", PROGRAMMER_VERSION);
             break;
     }
     needs_redraw = true;

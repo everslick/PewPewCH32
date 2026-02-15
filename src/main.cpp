@@ -30,7 +30,7 @@
 #define PIN_TEST       10   // Test pin for toggling
 
 const int ch32v003_flash_size = 16*1024;
-extern const char* const PROGRAMMER_VERSION = "1.0";
+extern const char* const PROGRAMMER_VERSION = "1.0.0";
 
 // Fallback firmware if no external firmware repositories are available
 const uint8_t fallback_firmware[] = {
@@ -49,7 +49,7 @@ void drawTerminalUI() {
     printf("\033[2J\033[H");  // Clear screen + cursor home
     printf("//===========================================================\n");
     printf("//\n");
-    printf("// PewPewCH32 V%s\n", PROGRAMMER_VERSION);
+    printf("// PewPewCH32 %s\n", PROGRAMMER_VERSION);
     printf("//\n");
 
 #ifdef FIRMWARE_INVENTORY_ENABLED
@@ -194,28 +194,36 @@ int main() {
         if (state_machine->getCurrentState() == STATE_IDLE) {
             // Check trigger button
             if (input->checkTriggerButton()) {
-                printf_g("\n// Trigger detected! Starting flash sequence...\n");
-                buzzer->beepStart();
-                state_machine->startTargetCheck();
+                if (display->isSleeping()) {
+                    display->forceRedraw();
+                } else {
+                    printf_g("\n// Trigger detected! Starting flash sequence...\n");
+                    buzzer->beepStart();
+                    state_machine->startTargetCheck();
+                }
             }
 
             // Check BOOTSEL button
             InputHandler::ButtonEvent bootsel_event = input->getBootselEvent();
-            switch (bootsel_event) {
-                case InputHandler::BUTTON_SHORT_PRESS:
-                    state_machine->startProgramming();
-                    break;
+            if (bootsel_event != InputHandler::BUTTON_NONE && display->isSleeping()) {
+                display->forceRedraw();
+            } else {
+                switch (bootsel_event) {
+                    case InputHandler::BUTTON_SHORT_PRESS:
+                        state_machine->startProgramming();
+                        break;
 
-                case InputHandler::BUTTON_LONG_PRESS:
-                    buzzer->beepWarning();
-                    state_machine->cycleFirmware();
-                    settings->setLastFirmwareIndex(state_machine->getCurrentFirmwareIndex());
-                    settings->save();
-                    needs_terminal_redraw = true;
-                    break;
+                    case InputHandler::BUTTON_LONG_PRESS:
+                        buzzer->beepWarning();
+                        state_machine->cycleFirmware();
+                        settings->setLastFirmwareIndex(state_machine->getCurrentFirmwareIndex());
+                        settings->save();
+                        needs_terminal_redraw = true;
+                        break;
 
-                default:
-                    break;
+                    default:
+                        break;
+                }
             }
 
             // Check for UART input

@@ -38,6 +38,7 @@ public:
     void forceRedraw() { wake(); needs_redraw = true; }
 
     bool isPresent() const { return display_present; }
+    bool isSleeping() const { return is_sleeping; }
 
 private:
     uint8_t framebuffer[DISPLAY_BUF_SIZE];
@@ -63,6 +64,7 @@ private:
     void clear();
     void drawString(int x, int y, const char* str);
     void drawStringInverted(int x, int y, const char* str);
+    void drawStringPixel(int x, int y, const char* str);
 
     void render();
     void wake();
