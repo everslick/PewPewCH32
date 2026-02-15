@@ -167,6 +167,10 @@ int main() {
     // Track state changes for terminal redraw + sounds
     SystemState last_state = STATE_IDLE;
 
+    // When a HW button wakes the display from sleep, suppress its action
+    // until all buttons are physically released.
+    bool suppress_buttons_for_wake = false;
+
     // Main loop
     while (1) {
         // Update all controllers
@@ -193,22 +197,32 @@ int main() {
 
         // Handle input only in IDLE state
         if (state_machine->getCurrentState() == STATE_IDLE) {
-            // Check trigger button
-            if (input->checkTriggerButton()) {
-                if (display->isSleeping()) {
-                    display->forceRedraw();
-                } else {
+            // Read HW button events
+            bool trigger_fired = input->checkTriggerButton();
+            InputHandler::ButtonEvent bootsel_event = input->getBootselEvent();
+
+            // Wake display on any HW button press while sleeping
+            if (display->isSleeping() &&
+                (trigger_fired || bootsel_event != InputHandler::BUTTON_NONE)) {
+                display->forceRedraw();
+                suppress_buttons_for_wake = true;
+            }
+
+            // Clear suppress flag once all buttons are released and no events pending
+            if (suppress_buttons_for_wake &&
+                gpio_get(PIN_TRIGGER) && !input->checkBootselButton() &&
+                !trigger_fired && bootsel_event == InputHandler::BUTTON_NONE) {
+                suppress_buttons_for_wake = false;
+            }
+
+            // Handle HW button actions (suppressed after display wake)
+            if (!suppress_buttons_for_wake) {
+                if (trigger_fired) {
                     printf_g("\n// Trigger detected! Starting flash sequence...\n");
                     buzzer->beepStart();
                     state_machine->startProgramming();
                 }
-            }
 
-            // Check BOOTSEL button
-            InputHandler::ButtonEvent bootsel_event = input->getBootselEvent();
-            if (bootsel_event != InputHandler::BUTTON_NONE && display->isSleeping()) {
-                display->forceRedraw();
-            } else {
                 switch (bootsel_event) {
                     case InputHandler::BUTTON_SHORT_PRESS:
                         state_machine->startProgramming();
