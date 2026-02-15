@@ -156,10 +156,6 @@ void StateMachine::process() {
 }
 
 void StateMachine::startProgramming() {
-    startTargetCheck();
-}
-
-void StateMachine::startTargetCheck() {
     if (current_state == STATE_IDLE) {
         setState(STATE_CHECKING_TARGET);
     }

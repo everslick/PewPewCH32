@@ -37,7 +37,6 @@ public:
     
     // Actions
     void startProgramming();
-    void startTargetCheck();
     void cycleFirmware();
     
     // Display integration

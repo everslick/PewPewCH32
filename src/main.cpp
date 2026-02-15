@@ -200,7 +200,7 @@ int main() {
                 } else {
                     printf_g("\n// Trigger detected! Starting flash sequence...\n");
                     buzzer->beepStart();
-                    state_machine->startTargetCheck();
+                    state_machine->startProgramming();
                 }
             }
 
