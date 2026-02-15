@@ -18,7 +18,9 @@ StateMachine::StateMachine(LedController* led, RVDebug* rvd, WCHFlash* flash)
       led_controller(led),
       display_controller(nullptr),
       rv_debug(rvd),
-      wch_flash(flash) {
+      wch_flash(flash),
+      debug_swio(nullptr),
+      swio_pin(-1) {
     // Initialize to IDLE state properly (triggers state entry actions)
     current_state = (SystemState)-1; // Set to invalid state first
     setState(STATE_IDLE);
@@ -221,11 +223,34 @@ const char* StateMachine::getCurrentMenuName() const {
 }
 
 bool StateMachine::haltWithTimeout(uint32_t timeout_ms) {
+    // Re-initialize SWIO bus before each attempt so a freshly connected
+    // target receives the reset pulse and config sequence.
+    if (debug_swio) {
+        debug_swio->reset(swio_pin);
+        rv_debug->init();
+    }
+
     uint32_t start_time = to_ms_since_boot(get_absolute_time());
-    
+
     rv_debug->set_dmcontrol(0x80000001);
-    
-    while (!rv_debug->get_dmstatus().ALLHALTED) {
+
+    while (true) {
+        Reg_DMSTATUS status = rv_debug->get_dmstatus();
+
+        // Reject obviously invalid responses (no chip connected returns
+        // all-ones or all-zeros depending on pin state)
+        uint32_t raw = status.raw;
+        if (raw == 0xFFFFFFFF || raw == 0x00000000 ||
+            (status.ALLHALTED && status.ALLRUNNING)) {
+            rv_debug->set_dmcontrol(0x00000001);
+            return false;
+        }
+
+        if (status.ALLHALTED) {
+            rv_debug->set_dmcontrol(0x00000001);
+            return true;
+        }
+
         uint32_t elapsed = to_ms_since_boot(get_absolute_time()) - start_time;
         if (elapsed > timeout_ms) {
             rv_debug->set_dmcontrol(0x00000001);
@@ -233,9 +258,6 @@ bool StateMachine::haltWithTimeout(uint32_t timeout_ms) {
         }
         sleep_ms(1);
     }
-    
-    rv_debug->set_dmcontrol(0x00000001);
-    return true;
 }
 
 bool StateMachine::programFlash(const uint8_t* data, size_t size, uint32_t base_address) {

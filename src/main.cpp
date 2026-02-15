@@ -138,6 +138,7 @@ int main() {
     // Initialize state machine
     StateMachine* state_machine = new StateMachine(led, rvd, flash);
     state_machine->setDisplayController(display);
+    state_machine->setDebugBus(swio, PIN_PRG_SWIO);
     g_state_machine = state_machine;
 
     // Restore last firmware selection from settings

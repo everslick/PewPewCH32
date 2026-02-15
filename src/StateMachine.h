@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include "LedController.h"
+#include "PicoSWIO.h"
 #include "RVDebug.h"
 #include "WCHFlash.h"
 
@@ -41,6 +42,7 @@ public:
     
     // Display integration
     void setDisplayController(DisplayController* dc) { display_controller = dc; }
+    void setDebugBus(PicoSWIO* swio, int pin) { debug_swio = swio; swio_pin = pin; }
 
     // Configuration
     void setCurrentFirmwareIndex(int index) { current_firmware_index = index; }
@@ -57,6 +59,8 @@ private:
     DisplayController* display_controller;
     RVDebug* rv_debug;
     WCHFlash* wch_flash;
+    PicoSWIO* debug_swio;
+    int swio_pin;
     
     // Helper functions
     bool haltWithTimeout(uint32_t timeout_ms);
