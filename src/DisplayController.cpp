@@ -302,10 +302,10 @@ void DisplayController::render() {
         int x = (DISPLAY_WIDTH - text_width) / 2;
         if (x < 0) x = 0;
         drawStringInverted(x, 0, menu_line);
-    }
 
-    // Filled pixel row below menu bar (y=8)
-    memset(framebuffer + 1 * DISPLAY_WIDTH, 0x01, DISPLAY_WIDTH);
+        // Filled pixel row below menu bar (y=8)
+        memset(framebuffer + 1 * DISPLAY_WIDTH, 0x01, DISPLAY_WIDTH);
+    }
 
     // Line 2 (y=13): System state
     if (state_line[0]) {

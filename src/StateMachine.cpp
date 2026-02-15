@@ -1,4 +1,5 @@
 #include "StateMachine.h"
+#include "PicoSWIO.h"
 #include "DisplayController.h"
 #include <stdio.h>
 #include <string.h>
@@ -18,9 +19,9 @@ StateMachine::StateMachine(LedController* led, RVDebug* rvd, WCHFlash* flash)
       led_controller(led),
       display_controller(nullptr),
       rv_debug(rvd),
-      wch_flash(flash),
       debug_swio(nullptr),
-      swio_pin(-1) {
+      swio_pin(-1),
+      wch_flash(flash) {
     // Initialize to IDLE state properly (triggers state entry actions)
     current_state = (SystemState)-1; // Set to invalid state first
     setState(STATE_IDLE);
@@ -155,9 +156,7 @@ void StateMachine::process() {
 }
 
 void StateMachine::startProgramming() {
-    if (current_state == STATE_IDLE) {
-        setState(STATE_CHECKING_TARGET);
-    }
+    startTargetCheck();
 }
 
 void StateMachine::startTargetCheck() {

@@ -3,10 +3,10 @@
 
 #include <stdint.h>
 #include "LedController.h"
-#include "PicoSWIO.h"
 #include "RVDebug.h"
 #include "WCHFlash.h"
 
+struct PicoSWIO;
 class DisplayController;
 
 #ifdef FIRMWARE_INVENTORY_ENABLED
@@ -58,9 +58,9 @@ private:
     LedController* led_controller;
     DisplayController* display_controller;
     RVDebug* rv_debug;
-    WCHFlash* wch_flash;
     PicoSWIO* debug_swio;
     int swio_pin;
+    WCHFlash* wch_flash;
     
     // Helper functions
     bool haltWithTimeout(uint32_t timeout_ms);
