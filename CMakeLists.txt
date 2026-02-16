@@ -43,6 +43,7 @@ add_executable(PewPewCH32
     src/InputHandler.cpp
     src/Settings.cpp
     src/DisplayController.cpp
+    src/SetupScreen.cpp
 )
 
 # Include directories

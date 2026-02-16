@@ -146,7 +146,8 @@ static const uint8_t ssd1306_init_cmds[] = {
 
 DisplayController::DisplayController()
     : display_present(false), needs_redraw(false), is_flipped(false),
-      is_sleeping(false), last_activity_ms(0) {
+      is_sleeping(false), last_activity_ms(0),
+      sleep_timeout_ms(DISPLAY_SLEEP_MS_DEFAULT) {
     memset(framebuffer, 0, sizeof(framebuffer));
     menu_line[0] = '\0';
     state_line[0] = '\0';
@@ -323,10 +324,10 @@ void DisplayController::render() {
 void DisplayController::update() {
     if (!display_present) return;
 
-    // Screensaver: blank after inactivity
-    if (!is_sleeping) {
+    // Screensaver: blank after inactivity (0 = never sleep)
+    if (!is_sleeping && sleep_timeout_ms > 0) {
         uint32_t now = to_ms_since_boot(get_absolute_time());
-        if ((now - last_activity_ms) >= DISPLAY_SLEEP_MS) {
+        if ((now - last_activity_ms) >= sleep_timeout_ms) {
             sendCommand(0xAE);  // Display off
             is_sleeping = true;
             return;
@@ -384,4 +385,12 @@ void DisplayController::setFlipped(bool flipped) {
     sendCommand(flipped ? 0xA0 : 0xA1);  // SEG_REMAP
     sendCommand(flipped ? 0xC0 : 0xC8);  // COM_SCAN_DIR
     needs_redraw = true;
+}
+
+void DisplayController::setSleepTimeout(uint32_t ms) {
+    sleep_timeout_ms = ms;
+    // If disabling sleep while currently sleeping, wake up
+    if (ms == 0 && is_sleeping) {
+        wake();
+    }
 }

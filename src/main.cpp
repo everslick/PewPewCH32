@@ -10,6 +10,7 @@
 #include "InputHandler.h"
 #include "Settings.h"
 #include "DisplayController.h"
+#include "SetupScreen.h"
 
 // Debug modules
 #include "PicoSWIO.h"
@@ -25,12 +26,10 @@
 #include "firmware_inventory.h"
 #endif
 
-// Configuration
-#define PIN_PRG_SWIO    8   // To SDI on CH32
-#define PIN_TEST       10   // Test pin for toggling
+static int swio_pin = 8;   // To SDI on CH32, loaded from settings
 
 const int ch32v003_flash_size = 16*1024;
-extern const char* const PROGRAMMER_VERSION = "1.0.0";
+extern const char* const PROGRAMMER_VERSION = "1.1.0";
 
 // Fallback firmware if no external firmware repositories are available
 const uint8_t fallback_firmware[] = {
@@ -43,6 +42,8 @@ const size_t fallback_firmware_size = sizeof(fallback_firmware);
 
 // Global pointers for terminal UI redraw
 static StateMachine* g_state_machine = nullptr;
+static SetupScreen* setup_screen = nullptr;
+static bool in_setup_mode = false;
 
 // Draw the full terminal UI (replaces print_header + list_firmware)
 void drawTerminalUI() {
@@ -61,16 +62,17 @@ void drawTerminalUI() {
     }
     printf("// %s [9] REBOOT\n", (selected == 9) ? "-->" : "   ");
     printf("//\n");
-    printf("// [UP/DN] SELECT     [ENTER] FLASH     [0-9] QUICK SELECT\n");
-    printf("// [T] TOGGLE GPIO%d  [F] FLIP DISPLAY  [R] REFRESH\n", PIN_TEST);
+    printf("// [UP/DN] SELECT  [ENTER] FLASH  [0-9] QUICK SELECT\n");
+    printf("// [S] SETUP       [R] REFRESH\n");
 #else
     printf("//     [0] fallback (built-in minimal firmware)\n");
     printf("//\n");
-    printf("// [ENTER] FLASH  [F] FLIP DISPLAY  [R] REFRESH\n");
+    printf("// [ENTER] FLASH  [S] SETUP  [R] REFRESH\n");
 #endif
 
     printf("//\n");
-    printf("// Status: %s\n", StateMachine::getStateName(g_state_machine->getCurrentState()));
+    printf("// Status: %s  (swio=GPIO%d)\n",
+           StateMachine::getStateName(g_state_machine->getCurrentState()), swio_pin);
     printf("//\n");
     printf("//===========================================================\n");
 }
@@ -87,10 +89,12 @@ int main() {
     // Initialize persistent settings (first — display depends on it)
     Settings* settings = new Settings();
     settings->init();
+    swio_pin = settings->getSwioPin();
 
     // Initialize display
     DisplayController* display = new DisplayController();
     display->init(settings->getDisplayFlip());
+    display->setSleepTimeout(SLEEP_TIMEOUT_OPTIONS[settings->getSleepTimeoutIndex()]);
 
     // Initialize controllers
     LedController* led = new LedController();
@@ -111,9 +115,9 @@ int main() {
     led->setAllGpioLeds(false);
 
     // Initialize debug interfaces
-    printf_g("// Initializing PicoSWIO on GPIO%d\n", PIN_PRG_SWIO);
+    printf_g("// Initializing PicoSWIO on GPIO%d\n", swio_pin);
     PicoSWIO* swio = new PicoSWIO();
-    swio->reset(PIN_PRG_SWIO);
+    swio->reset(swio_pin);
 
     printf_g("// Initializing RVDebug\n");
     RVDebug* rvd = new RVDebug(swio, 16);
@@ -138,8 +142,11 @@ int main() {
     // Initialize state machine
     StateMachine* state_machine = new StateMachine(led, rvd, flash);
     state_machine->setDisplayController(display);
-    state_machine->setDebugBus(swio, PIN_PRG_SWIO);
+    state_machine->setDebugBus(swio, swio_pin);
     g_state_machine = state_machine;
+
+    // Create setup screen
+    setup_screen = new SetupScreen();
 
     // Restore last firmware selection from settings
     int last_idx = settings->getLastFirmwareIndex();
@@ -176,6 +183,26 @@ int main() {
         // Update all controllers
         led->update();
         display->update();
+
+        // Setup mode: handle input separately, skip normal processing
+        if (in_setup_mode) {
+            int c = getchar_timeout_us(0);
+            if (c != PICO_ERROR_TIMEOUT) {
+                SetupResult result = setup_screen->processInput(c);
+                if (result == RESULT_SAVED) {
+                    setup_screen->applyToHardware(settings, display, swio, rvd,
+                                                  state_machine, &swio_pin);
+                    in_setup_mode = false;
+                    needs_terminal_redraw = true;
+                } else if (result == RESULT_CANCELLED) {
+                    in_setup_mode = false;
+                    needs_terminal_redraw = true;
+                }
+            }
+            sleep_ms(10);
+            continue;
+        }
+
         state_machine->process();
 
         // Check for state changes (sounds + terminal redraw)
@@ -243,27 +270,9 @@ int main() {
 
             // Check for UART input
             int c = getchar_timeout_us(0);
-            if (c != PICO_ERROR_TIMEOUT && (c == 't' || c == 'T')) {
-                printf_g("// TEST PIN: Toggling GPIO%d for 5 seconds...\n", PIN_TEST);
-                buzzer->beepWarning();
-                gpio_init(PIN_TEST);
-                gpio_set_dir(PIN_TEST, GPIO_OUT);
-                for (int i = 0; i < 20; i++) {
-                    gpio_put(PIN_TEST, i & 1);
-                    led->update();
-                    sleep_ms(250);
-                }
-                gpio_put(PIN_TEST, 0);
-                gpio_deinit(PIN_TEST);
-                printf_g("// TEST PIN: Done\n");
-                needs_terminal_redraw = true;
-            } else if (c != PICO_ERROR_TIMEOUT && (c == 'f' || c == 'F')) {
-                bool flipped = !settings->getDisplayFlip();
-                settings->setDisplayFlip(flipped);
-                settings->save();
-                display->setFlipped(flipped);
-                printf_g("// Display flip: %s\n", flipped ? "ON" : "OFF");
-                needs_terminal_redraw = true;
+            if (c != PICO_ERROR_TIMEOUT && (c == 's' || c == 'S')) {
+                setup_screen->enter(settings);
+                in_setup_mode = true;
             } else if (c != PICO_ERROR_TIMEOUT && (c == 'r' || c == 'R')) {
                 display->forceRedraw();
                 needs_terminal_redraw = true;
@@ -329,6 +338,7 @@ int main() {
     }
 
     // Cleanup (never reached)
+    delete setup_screen;
     delete console;
     delete gdb;
     delete soft;

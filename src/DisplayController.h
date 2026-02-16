@@ -16,8 +16,8 @@
 #define DISPLAY_PAGES     (DISPLAY_HEIGHT / 8)
 #define DISPLAY_BUF_SIZE  (DISPLAY_WIDTH * DISPLAY_PAGES)
 
-// Screensaver: blank display after 5 minutes of inactivity
-#define DISPLAY_SLEEP_MS  (5 * 60 * 1000)
+// Screensaver default: blank display after 5 minutes of inactivity
+#define DISPLAY_SLEEP_MS_DEFAULT  (5 * 60 * 1000)
 
 // Font dimensions
 #define FONT_WIDTH        8
@@ -35,6 +35,7 @@ public:
     void setMenuEntry(const char* name);
     void setSystemState(SystemState state);
     void setFlipped(bool flipped);
+    void setSleepTimeout(uint32_t ms);
     void forceRedraw() { wake(); needs_redraw = true; }
 
     bool isPresent() const { return display_present; }
@@ -47,6 +48,7 @@ private:
     bool is_flipped;
     bool is_sleeping;
     uint32_t last_activity_ms;
+    uint32_t sleep_timeout_ms;
 
     // Cached display content
     char menu_line[FONT_CHARS_PER_LINE + 1];
