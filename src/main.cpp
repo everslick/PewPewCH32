@@ -29,7 +29,7 @@
 static int swio_pin = 8;   // To SDI on CH32, loaded from settings
 
 const int ch32v003_flash_size = 16*1024;
-extern const char* const PROGRAMMER_VERSION = "1.1.0";
+extern const char* const PROGRAMMER_VERSION = "1.2.0";
 
 // Fallback firmware if no external firmware repositories are available
 const uint8_t fallback_firmware[] = {
