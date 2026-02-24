@@ -10,27 +10,41 @@ PewPewCH32 is designed for developers and manufacturers who need to:
 - **Switch between multiple firmware images** without reflashing the programmer
 - **Create standalone programming stations** for production environments
 
-### Key Benefits
+### Key Features
 
 - **Multi-firmware storage**: Store multiple firmware images in RP2040's 2MB flash
 - **No PC required**: Once configured, works as a standalone programmer
-- **Explicit addressing**: Each firmware specifies its own flash target address
-- **Instant switching**: Select different firmware via button press
-- **Visual feedback**: RGB LED for clear programming status
+- **OLED display**: Optional 128x32 SSD1306 display shows menu and status
+- **Setup screen**: Configure display orientation, screensaver timeout, and SWIO pin
+- **Persistent settings**: Configuration survives power cycles (stored in flash)
+- **Visual and audio feedback**: WS2812 RGB LED, discrete LEDs, and buzzer
+- **Multiple input methods**: Hardware button, BOOTSEL button, and USB serial
 
 ## Hardware Requirements
 
 - **Raspberry Pi Pico** (or compatible RP2040 board)
 - **Waveshare Pico Zero** recommended (has onboard WS2812 RGB LED)
 
+### Optional Components
+
+- **SSD1306 OLED display** (128x32, I2C, address 0x3C)
+- **Buzzer** (passive, connected to GPIO0)
+- **Trigger button** (active low, connected to GPIO1)
+- **Discrete LEDs** (active low: green, yellow, red)
+
 ### Pin Connections
 
 | Pico Pin | Function | Description |
 |----------|----------|-------------|
-| GPIO8    | PRG      | Connect to CH32V003 SDI pin (single-wire debug) |
-| GPIO16   | WS2812   | RGB LED status indicator (onboard on Waveshare Pico Zero) |
 | GPIO0    | Buzzer   | PWM buzzer output (optional) |
-| GPIO1    | Trigger  | Programming trigger button (active low, optional) |
+| GPIO1    | Trigger  | Programming trigger button, active low (optional) |
+| GPIO6    | OLED SDA | I2C data for SSD1306 display (optional) |
+| GPIO7    | OLED SCL | I2C clock for SSD1306 display (optional) |
+| GPIO8    | SWIO     | CH32V003 SDI pin (configurable in setup) |
+| GPIO14   | Green LED| Heartbeat / ready indication, active low (optional) |
+| GPIO15   | Yellow LED| Programming in progress, active low (optional) |
+| GPIO16   | WS2812   | RGB LED status (onboard on Waveshare Pico Zero) |
+| GPIO26   | Red LED  | Error indication, active low (optional) |
 
 ## Building
 
@@ -40,7 +54,13 @@ PewPewCH32 is designed for developers and manufacturers who need to:
 - **CMake** 3.13+
 - **Git** (for cloning dependencies)
 - **xxd** (for firmware conversion)
-- **RISC-V toolchain** (`riscv64-unknown-elf-gcc`) for building CH32 firmware
+
+### Installing Dependencies (Ubuntu/Debian)
+
+```bash
+sudo apt update
+sudo apt install cmake build-essential git xxd gcc-arm-none-eabi
+```
 
 ### Quick Start
 
@@ -53,7 +73,7 @@ cd PewPewCH32
 The build script automatically:
 - Checks for required dependencies
 - Clones build dependencies (Pico SDK, picorvd)
-- Builds emonio-ext firmware (requires RISC-V toolchain)
+- Verifies firmware binaries from `firmware.txt`
 - Generates the `.uf2` file ready for flashing
 
 ### Build Options
@@ -61,15 +81,8 @@ The build script automatically:
 ```bash
 ./build.sh              # Normal build
 ./build.sh clean        # Remove build directory
-./build.sh distclean    # Remove all generated files
+./build.sh distclean    # Remove all generated files and dependencies
 ./build.sh install      # Build and install to Pico in BOOTSEL mode
-```
-
-### Installing Dependencies (Ubuntu/Debian)
-
-```bash
-sudo apt update
-sudo apt install cmake build-essential git xxd gcc-arm-none-eabi gcc-riscv64-unknown-elf
 ```
 
 ## Firmware Management
@@ -85,12 +98,16 @@ The programmer loads firmware binaries listed in `firmware.txt`:
 # PATH:    Relative path to binary file
 # ADDRESS: Flash target address (hex)
 
-bootloader ../emonio-ext/bin/bootloader.bin 0x0000
-blink ../emonio-ext/bin/blink.bin 0x1040
-watchdog ../emonio-ext/bin/watchdog.bin 0x1040
+BootLoader     ../emonio-fw/ext/bootloader/bootloader.bin  0x0000
+X3[SD-WD]      ../emonio-fw/ext/bin/x3-sd-wd-1.0.bin       0x1040
+X4[SD-WD-IN]   ../emonio-fw/ext/bin/x4-sd-wd-in-1.0.bin    0x1040
+X3[BLINK]      ../emonio-fw/ext/bin/x3-blink-1.0.bin       0x1040
+X4[BLINK]      ../emonio-fw/ext/bin/x4-blink-1.0.bin       0x1040
 ```
 
 PewPewCH32 treats each binary as opaque data and flashes it at the specified address. It has no knowledge of the CH32 flash layout — the binary is expected to be self-contained (e.g., APP binaries include their own XAPP header).
+
+A fallback firmware (minimal RISC-V reset vector) is included for standalone operation when no external firmware binaries are available.
 
 ## Flashing and Usage
 
@@ -108,7 +125,7 @@ PewPewCH32 treats each binary as opaque data and flashes it at the specified add
 
 ### 2. Connect CH32V003 Target
 
-- CH32V003 SDI pin → Pico GPIO8
+- CH32V003 SDI pin -> Pico GPIO8 (or configured SWIO pin)
 - Common ground connection
 
 ### 3. Monitor via USB Serial
@@ -121,68 +138,86 @@ screen /dev/ttyACM0 115200
 
 **BOOTSEL Button Controls:**
 - **Short press (<250ms)**: Program selected firmware to CH32V003
-- **Long press (≥750ms)**: Cycle through available firmware
-- LED shows selected firmware (N blue flashes for index N)
+- **Long press (>=750ms)**: Cycle through available firmware
 
-**Serial Selection:**
+**Trigger Button (GPIO1):**
+- Press to immediately program the selected firmware
 
-When the programmer is idle, you can send a single digit (`0`-`9`) over the USB serial console to select and immediately program a firmware entry. The available indices are shown in the menu printed at boot:
+**Serial Controls:**
 
-```
-// Available firmware:
-//   [0] WIPE FLASH
-//   [1] bootloader
-//   [2] blink
-```
+| Key | Action |
+|-----|--------|
+| `0`-`9` | Quick-select and program firmware entry |
+| Up/Down | Navigate firmware list |
+| Enter | Program selected firmware |
+| `S` | Enter setup screen |
+| `R` | Refresh display |
 
-Sending `1` over serial will select and flash entry `[1]` immediately. Out-of-range digits are rejected with an error message.
+## Setup Screen
+
+Press `S` in the serial terminal to enter the setup screen. Configure:
+
+| Setting | Options |
+|---------|---------|
+| Display orientation | Normal / Flipped |
+| Screensaver timeout | Off / 1 min / 3 min / 5 min / 10 min |
+| SWIO pin | GPIO 2-29 (excluding reserved pins) |
+
+**Setup controls:** Up/Down to select setting, Left/Right to change value, Enter to save, Esc to cancel.
+
+Settings are persisted to flash and survive power cycles.
 
 ## Status Indicators
 
-**WS2812 RGB LED:**
+### WS2812 RGB LED
+
 - **Rainbow fade**: Startup animation (3 seconds)
 - **Green pulse**: System ready (flash every 3 seconds)
 - **Blue flashes**: Firmware selection (count = firmware index)
 - **Red solid**: Error state (2 seconds)
 
-## Available Firmware
+### Discrete LEDs
 
-| Firmware | Address | Description |
-|----------|---------|-------------|
-| bootloader | 0x0000 | I2C bootloader (flash first) |
-| blink | 0x1040 | LED blink (includes app header) |
-| watchdog | 0x1040 | I2C watchdog (includes app header) |
+- **Green (GPIO14)**: Heartbeat (blinks every 3 seconds when ready)
+- **Yellow (GPIO15)**: Programming in progress
+- **Red (GPIO26)**: Error occurred
 
-**Typical workflow:**
-1. Flash **bootloader** at 0x0000 (only needed once per device)
-2. Flash application firmware (blink, watchdog) at 0x1040 — binaries include app header, bootloader boots them immediately
+### Buzzer
+
+- **2 kHz**: Programming started
+- **4 kHz**: Success
+- **1 kHz**: Failure
+- **3 kHz**: Warning
+
+### OLED Display
+
+When connected, the SSD1306 display shows:
+- Current firmware selection and menu
+- Programming status and progress
+- Enters screensaver mode after the configured timeout (button press wakes it)
 
 ## Project Structure
 
 ```
 PewPewCH32/
-├── firmware.txt          # Firmware manifest
-├── manifest.cmake        # CMake firmware build system
-├── build.sh              # Build script
-├── CMakeLists.txt        # Main CMake configuration
-├── src/                  # Programmer source code
-│   ├── main.cpp
-│   ├── StateMachine.cpp  # Programming state machine
-│   ├── LedController.cpp # WS2812 LED control
-│   └── ...
-├── picorvd/              # PicoRVD debug interface (cloned)
-├── pico-sdk/             # Raspberry Pi Pico SDK (cloned)
-└── build/                # Generated build files
-    ├── PewPewCH32.uf2    # Programmer firmware for Pico
-    └── src/firmware_*.c  # Generated firmware arrays
-```
-
-Firmware binaries are sourced from the sibling `emonio-ext` directory:
-```
-../emonio-ext/bin/
-├── bootloader.bin
-├── blink.bin
-└── watchdog.bin
+├── firmware.txt            # Firmware manifest
+├── manifest.cmake          # CMake firmware build system
+├── build.sh                # Build script
+├── CMakeLists.txt          # Main CMake configuration
+├── src/
+│   ├── main.cpp            # Entry point, event loop, terminal UI
+│   ├── StateMachine.cpp/h  # Programming state machine
+│   ├── LedController.cpp/h # WS2812 RGB and GPIO LED control
+│   ├── DisplayController.cpp/h # SSD1306 OLED driver
+│   ├── BuzzerController.cpp/h  # PWM buzzer control
+│   ├── InputHandler.cpp/h  # Button debouncing and events
+│   ├── Settings.cpp/h      # Flash-backed persistent settings
+│   ├── SetupScreen.cpp/h   # Terminal-based setup menu
+│   └── ws2812.pio          # PIO assembly for WS2812 protocol
+├── picorvd/                # PicoRVD debug interface (cloned)
+├── pico-sdk/               # Raspberry Pi Pico SDK (cloned)
+└── build/                  # Generated build files
+    └── PewPewCH32.uf2      # Programmer firmware for Pico
 ```
 
 ## I2C Bootloader
@@ -205,7 +240,7 @@ The CH32V003 bootloader enables over-the-air updates via I2C.
 
 ### App Header Structure
 
-The app header at 0x1040 is part of the application binary (generated at build time by emonio-ext, not by PewPewCH32):
+The app header at 0x1040 is part of the application binary (generated at build time by emonio-fw, not by PewPewCH32):
 
 ```c
 typedef struct __attribute__((packed)) {
