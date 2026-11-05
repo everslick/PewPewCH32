@@ -4,9 +4,6 @@
 #include <stdint.h>
 #include "pico/types.h"
 
-// Pin definition
-#define PIN_BUZZER      0
-
 // Buzzer frequencies (Hz)
 #define BUZZER_FREQ_DEFAULT     4000   // 4KHz default
 #define BUZZER_FREQ_START       2000   // Start tone

@@ -4,6 +4,8 @@
 #include "hardware/pwm.h"
 #include "hardware/clocks.h"
 
+#include "main.h"
+
 BuzzerController::BuzzerController() : buzzer_slice(0) {
 }
 

@@ -1,9 +1,12 @@
-#include "LedController.h"
 #include <math.h>
+
+#include "LedController.h"
 #include "hardware/gpio.h"
 #include "hardware/pio.h"
 #include "hardware/clocks.h"
 #include "ws2812.pio.h"
+
+#include "main.h"
 
 // WS2812 PIO implementation
 static PIO ws2812_pio = pio1;

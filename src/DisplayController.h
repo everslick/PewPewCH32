@@ -2,11 +2,12 @@
 #define DISPLAY_CONTROLLER_H
 
 #include <stdint.h>
+
+#include "main.h"
+
 #include "StateMachine.h"
 
 // I2C configuration
-#define DISPLAY_SDA_PIN   6
-#define DISPLAY_SCL_PIN   7
 #define DISPLAY_I2C_FREQ  400000
 #define DISPLAY_ADDR      0x3C
 

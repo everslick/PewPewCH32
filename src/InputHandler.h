@@ -3,9 +3,6 @@
 
 #include <stdint.h>
 
-// Pin definitions
-#define PIN_TRIGGER     1   // Active low
-
 // Timing definitions
 #define TRIGGER_DEBOUNCE_MS     50
 #define BOOTSEL_SHORT_PRESS_MS  250

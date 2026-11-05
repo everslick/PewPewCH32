@@ -5,6 +5,8 @@
 #include "hardware/structs/ioqspi.h"
 #include "hardware/structs/sio.h"
 
+#include "main.h"
+
 InputHandler::InputHandler() 
     : last_trigger_time(0),
       bootsel_pressed(false),

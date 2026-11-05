@@ -1,10 +1,11 @@
-#include "DisplayController.h"
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
+#include "DisplayController.h"
 #include "pico/stdlib.h"
 #include "hardware/i2c.h"
 #include "utils.h"
+#include "main.h"
 
 // I2C instance (defined here, not in header, to avoid SDK header dependency)
 #define DISPLAY_I2C i2c1
@@ -187,10 +188,10 @@ void DisplayController::initDisplay(bool flipped) {
 void DisplayController::init(bool flipped) {
     // Initialize I2C1
     i2c_init(DISPLAY_I2C, DISPLAY_I2C_FREQ);
-    gpio_set_function(DISPLAY_SDA_PIN, GPIO_FUNC_I2C);
-    gpio_set_function(DISPLAY_SCL_PIN, GPIO_FUNC_I2C);
-    gpio_pull_up(DISPLAY_SDA_PIN);
-    gpio_pull_up(DISPLAY_SCL_PIN);
+    gpio_set_function(PIN_DSP_SDA, GPIO_FUNC_I2C);
+    gpio_set_function(PIN_DSP_SCL, GPIO_FUNC_I2C);
+    gpio_pull_up(PIN_DSP_SDA);
+    gpio_pull_up(PIN_DSP_SCL);
 
     // Probe for display
     if (!probe()) {
