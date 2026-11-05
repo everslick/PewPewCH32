@@ -12,6 +12,8 @@
 #include "DisplayController.h"
 #include "SetupScreen.h"
 
+#include "main.h"
+
 // Debug modules
 #include "PicoSWIO.h"
 #include "RVDebug.h"
@@ -25,8 +27,6 @@
 #ifdef FIRMWARE_INVENTORY_ENABLED
 #include "firmware_inventory.h"
 #endif
-
-static int swio_pin = 8;   // To SDI on CH32, loaded from settings
 
 const int ch32v003_flash_size = 16*1024;
 extern const char* const PROGRAMMER_VERSION = "1.2.0";
@@ -72,7 +72,7 @@ void drawTerminalUI() {
 
     printf("//\n");
     printf("// Status: %s  (swio=GPIO%d)\n",
-           StateMachine::getStateName(g_state_machine->getCurrentState()), swio_pin);
+           StateMachine::getStateName(g_state_machine->getCurrentState()), PIN_SWIO);
     printf("//\n");
     printf("//===========================================================\n");
 }
@@ -89,7 +89,6 @@ int main() {
     // Initialize persistent settings (first — display depends on it)
     Settings* settings = new Settings();
     settings->init();
-    swio_pin = settings->getSwioPin();
 
     // Initialize display
     DisplayController* display = new DisplayController();
@@ -115,9 +114,9 @@ int main() {
     led->setAllGpioLeds(false);
 
     // Initialize debug interfaces
-    printf_g("// Initializing PicoSWIO on GPIO%d\n", swio_pin);
+    printf_g("// Initializing PicoSWIO on GPIO%d\n", PIN_SWIO);
     PicoSWIO* swio = new PicoSWIO();
-    swio->reset(swio_pin);
+    swio->reset(PIN_SWIO);
 
     printf_g("// Initializing RVDebug\n");
     RVDebug* rvd = new RVDebug(swio, 16);
@@ -142,7 +141,7 @@ int main() {
     // Initialize state machine
     StateMachine* state_machine = new StateMachine(led, rvd, flash);
     state_machine->setDisplayController(display);
-    state_machine->setDebugBus(swio, swio_pin);
+    state_machine->setDebugBus(swio, PIN_SWIO);
     g_state_machine = state_machine;
 
     // Create setup screen
@@ -190,8 +189,7 @@ int main() {
             if (c != PICO_ERROR_TIMEOUT) {
                 SetupResult result = setup_screen->processInput(c);
                 if (result == RESULT_SAVED) {
-                    setup_screen->applyToHardware(settings, display, swio, rvd,
-                                                  state_machine, &swio_pin);
+                    setup_screen->applyToHardware(settings, display);
                     in_setup_mode = false;
                     needs_terminal_redraw = true;
                 } else if (result == RESULT_CANCELLED) {

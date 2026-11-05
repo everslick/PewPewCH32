@@ -22,7 +22,6 @@ void Settings::loadDefaults() {
     memset(&data, 0, sizeof(data));
     data.magic = SETTINGS_MAGIC;
     data.display_flip = false;
-    data.swio_pin = 8;
     data.sleep_timeout_idx = 3;  // 5 min
     data.last_firmware_idx = 1;
     data.crc = calculateCrc(&data);
@@ -57,10 +56,9 @@ void Settings::init() {
     if (validate(flash_data)) {
         memcpy(&data, flash_data, sizeof(data));
         // Sanity-check fields to guard against stale/future-version data
-        if (data.swio_pin > 29) data.swio_pin = 8;
         if (data.sleep_timeout_idx > 4) data.sleep_timeout_idx = 3;
-        printf_g("// Settings loaded from flash (flip=%d, swio=%d, sleep=%d, fw=%d)\n",
-                 data.display_flip, data.swio_pin, data.sleep_timeout_idx,
+        printf_g("// Settings loaded from flash (flip=%d, sleep=%d, fw=%d)\n",
+                 data.display_flip, data.sleep_timeout_idx,
                  data.last_firmware_idx);
     } else {
         loadDefaults();
@@ -109,13 +107,6 @@ void Settings::save() {
 void Settings::setDisplayFlip(bool flip) {
     if (data.display_flip != flip) {
         data.display_flip = flip;
-        dirty = true;
-    }
-}
-
-void Settings::setSwioPin(uint8_t pin) {
-    if (data.swio_pin != pin) {
-        data.swio_pin = pin;
         dirty = true;
     }
 }

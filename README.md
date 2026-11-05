@@ -15,7 +15,7 @@ PewPewCH32 is designed for developers and manufacturers who need to:
 - **Multi-firmware storage**: Store multiple firmware images in RP2040's 2MB flash
 - **No PC required**: Once configured, works as a standalone programmer
 - **OLED display**: Optional 128x32 SSD1306 display shows menu and status
-- **Setup screen**: Configure display orientation, screensaver timeout, and SWIO pin
+- **Setup screen**: Configure display orientation, and screensaver timeout
 - **Persistent settings**: Configuration survives power cycles (stored in flash)
 - **Visual and audio feedback**: WS2812 RGB LED, discrete LEDs, and buzzer
 - **Multiple input methods**: Hardware button, BOOTSEL button, and USB serial
@@ -28,19 +28,19 @@ PewPewCH32 is designed for developers and manufacturers who need to:
 ### Optional Components
 
 - **SSD1306 OLED display** (128x32, I2C, address 0x3C)
-- **Buzzer** (passive, connected to GPIO0)
-- **Trigger button** (active low, connected to GPIO1)
+- **Buzzer** (passive, connected to GPIO5)
+- **Trigger button** (active low, connected to GPIO4)
 - **Discrete LEDs** (active low: green, yellow, red)
 
 ### Pin Connections
 
 | Pico Pin | Function | Description |
 |----------|----------|-------------|
-| GPIO0    | Buzzer   | PWM buzzer output (optional) |
-| GPIO1    | Trigger  | Programming trigger button, active low (optional) |
+| GPIO4    | Trigger  | Programming trigger button, active low (optional) |
+| GPIO5    | Buzzer   | PWM buzzer output (optional) |
 | GPIO6    | OLED SDA | I2C data for SSD1306 display (optional) |
 | GPIO7    | OLED SCL | I2C clock for SSD1306 display (optional) |
-| GPIO8    | SWIO     | CH32V003 SDI pin (configurable in setup) |
+| GPIO8    | SWIO     | CH32V003 SDI pin |
 | GPIO14   | Green LED| Heartbeat / ready indication, active low (optional) |
 | GPIO15   | Yellow LED| Programming in progress, active low (optional) |
 | GPIO16   | WS2812   | RGB LED status (onboard on Waveshare Pico Zero) |
@@ -125,7 +125,7 @@ A fallback firmware (minimal RISC-V reset vector) is included for standalone ope
 
 ### 2. Connect CH32V003 Target
 
-- CH32V003 SDI pin -> Pico GPIO8 (or configured SWIO pin)
+- CH32V003 SDI pin -> Pico GPIO8
 - Common ground connection
 
 ### 3. Monitor via USB Serial
@@ -140,7 +140,7 @@ screen /dev/ttyACM0 115200
 - **Short press (<250ms)**: Program selected firmware to CH32V003
 - **Long press (>=750ms)**: Cycle through available firmware
 
-**Trigger Button (GPIO1):**
+**Trigger Button (GPIO4):**
 - Press to immediately program the selected firmware
 
 **Serial Controls:**
@@ -161,7 +161,6 @@ Press `S` in the serial terminal to enter the setup screen. Configure:
 |---------|---------|
 | Display orientation | Normal / Flipped |
 | Screensaver timeout | Off / 1 min / 3 min / 5 min / 10 min |
-| SWIO pin | GPIO 2-29 (excluding reserved pins) |
 
 **Setup controls:** Up/Down to select setting, Left/Right to change value, Enter to save, Esc to cancel.
 
