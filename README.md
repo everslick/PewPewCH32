@@ -18,7 +18,7 @@ PewPewCH32 is designed for developers and manufacturers who need to:
 - **Setup screen**: Configure display orientation, and screensaver timeout
 - **Persistent settings**: Configuration survives power cycles (stored in flash)
 - **Visual and audio feedback**: WS2812 RGB LED, discrete LEDs, and buzzer
-- **Multiple input methods**: Hardware button, BOOTSEL button, and USB serial
+- **Multiple input methods**: Hardware button, rotary encoder, BOOTSEL button, and USB serial
 
 ## Hardware Requirements
 
@@ -30,6 +30,7 @@ PewPewCH32 is designed for developers and manufacturers who need to:
 - **SSD1306 OLED display** (128x32, I2C, address 0x3C)
 - **Buzzer** (passive, connected to GPIO5)
 - **Trigger button** (active low, connected to GPIO4)
+- **Rotary encoder** with push button (connected to GPIO27-29)
 - **Discrete LEDs** (active low: green, yellow, red)
 
 ### Pin Connections
@@ -45,6 +46,9 @@ PewPewCH32 is designed for developers and manufacturers who need to:
 | GPIO15   | Yellow LED| Programming in progress, active low (optional) |
 | GPIO16   | WS2812   | RGB LED status (onboard on Waveshare Pico Zero) |
 | GPIO26   | Red LED  | Error indication, active low (optional) |
+| GPIO27   | Encoder SW | Rotary encoder push button, active low (optional) |
+| GPIO28   | Encoder DT | Rotary encoder phase B (optional) |
+| GPIO29   | Encoder CLK | Rotary encoder phase A (optional) |
 
 ## Building
 
@@ -142,6 +146,10 @@ screen /dev/ttyACM0 115200
 
 **Trigger Button (GPIO4):**
 - Press to immediately program the selected firmware
+
+**Rotary Encoder (GPIO27-29):**
+- Turn to select the next/previous firmware
+- Press to program the selected firmware
 
 **Serial Controls:**
 

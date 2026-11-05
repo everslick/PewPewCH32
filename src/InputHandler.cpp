@@ -7,8 +7,33 @@
 
 #include "main.h"
 
+// Encoder quadrature state, updated from GPIO interrupt
+static volatile int32_t encoder_count = 0;
+static volatile uint8_t encoder_state = 0;
+
+// Indexed by (previous AB << 2) | current AB; invalid transitions count 0
+static const int8_t ENCODER_TABLE[16] = {
+     0, -1,  1,  0,
+     1,  0,  0, -1,
+    -1,  0,  0,  1,
+     0,  1, -1,  0
+};
+
+static uint8_t readEncoderPins() {
+    return (gpio_get(PIN_ENC_CLK) << 1) | gpio_get(PIN_ENC_DIR);
+}
+
+static void encoderIrqHandler(uint gpio, uint32_t events) {
+    (void)gpio;
+    (void)events;
+    encoder_state = ((encoder_state << 2) | readEncoderPins()) & 0x0F;
+    encoder_count += ENCODER_TABLE[encoder_state];
+}
+
 InputHandler::InputHandler() 
     : last_trigger_time(0),
+      enc_button_pressed(false),
+      last_enc_button_time(0),
       bootsel_pressed(false),
       bootsel_press_start(0),
       long_press_triggered(false) {
@@ -22,6 +47,21 @@ void InputHandler::init() {
     gpio_init(PIN_TRIGGER);
     gpio_set_dir(PIN_TRIGGER, GPIO_IN);
     gpio_pull_up(PIN_TRIGGER);
+
+    // Initialize rotary encoder pins with pull-ups
+    const uint enc_pins[] = { PIN_ENC_ENTER, PIN_ENC_DIR, PIN_ENC_CLK };
+    for (uint pin : enc_pins) {
+        gpio_init(pin);
+        gpio_set_dir(pin, GPIO_IN);
+        gpio_pull_up(pin);
+    }
+
+    // Decode encoder quadrature on every edge of both phases
+    encoder_state = readEncoderPins();
+    gpio_set_irq_enabled_with_callback(PIN_ENC_CLK,
+        GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true, &encoderIrqHandler);
+    gpio_set_irq_enabled(PIN_ENC_DIR,
+        GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true);
 }
 
 bool InputHandler::checkTriggerButton() {
@@ -35,6 +75,30 @@ bool InputHandler::checkTriggerButton() {
         }
     }
     return false;
+}
+
+bool InputHandler::checkEncoderButton() {
+    uint32_t now = to_ms_since_boot(get_absolute_time());
+    bool pressed = !gpio_get(PIN_ENC_ENTER);  // Active low
+    bool event = false;
+
+    // Report press edge only, ignore changes within debounce window
+    if (pressed != enc_button_pressed &&
+        (now - last_enc_button_time) > TRIGGER_DEBOUNCE_MS) {
+        enc_button_pressed = pressed;
+        last_enc_button_time = now;
+        event = pressed;
+    }
+    return event;
+}
+
+int InputHandler::getEncoderSteps() {
+    uint32_t flags = save_and_disable_interrupts();
+    int32_t count = encoder_count;
+    int steps = count / ENCODER_STEPS_PER_DETENT;
+    encoder_count = count - steps * ENCODER_STEPS_PER_DETENT;
+    restore_interrupts(flags);
+    return steps;
 }
 
 bool __no_inline_not_in_flash_func(InputHandler::getBootselButtonState)() {

@@ -8,6 +8,9 @@
 #define BOOTSEL_SHORT_PRESS_MS  250
 #define BOOTSEL_LONG_PRESS_MS   750
 
+// Quadrature transitions per encoder detent (typically 4, some encoders use 2)
+#define ENCODER_STEPS_PER_DETENT 4
+
 class InputHandler {
 public:
     InputHandler();
@@ -18,6 +21,10 @@ public:
     // Check for input events
     bool checkTriggerButton();
     bool checkBootselButton();
+    bool checkEncoderButton();
+
+    // Encoder detents since last call (positive = clockwise)
+    int getEncoderSteps();
     
     // Get button states
     enum ButtonEvent {
@@ -32,6 +39,10 @@ public:
 private:
     // Trigger button state
     uint32_t last_trigger_time;
+
+    // Encoder button state
+    bool enc_button_pressed;
+    uint32_t last_enc_button_time;
     
     // Bootsel button state
     bool bootsel_pressed;

@@ -80,6 +80,22 @@ void drawTerminalUI() {
 // Flag for terminal redraw from main loop
 static bool needs_terminal_redraw = false;
 
+#ifdef FIRMWARE_INVENTORY_ENABLED
+// Step through the firmware menu: 1..firmware_count, 9, 0, wrapping around
+static int stepFirmwareIndex(int idx, int dir) {
+    if (dir < 0) {
+        if (idx == 0) idx = 9;
+        else if (idx == 9) idx = firmware_count;
+        else idx--;
+    } else {
+        if (idx == 9) idx = 0;
+        else if (idx >= firmware_count) idx = 9;
+        else idx++;
+    }
+    return idx;
+}
+#endif
+
 int main() {
     stdio_init_all();
 
@@ -224,19 +240,24 @@ int main() {
         if (state_machine->getCurrentState() == STATE_IDLE) {
             // Read HW button events
             bool trigger_fired = input->checkTriggerButton();
+            bool enc_enter_fired = input->checkEncoderButton();
+            int enc_steps = input->getEncoderSteps();
             InputHandler::ButtonEvent bootsel_event = input->getBootselEvent();
 
-            // Wake display on any HW button press while sleeping
+            // Wake display on any HW button press or encoder turn while sleeping
             if (display->isSleeping() &&
-                (trigger_fired || bootsel_event != InputHandler::BUTTON_NONE)) {
+                (trigger_fired || enc_enter_fired || enc_steps != 0 ||
+                 bootsel_event != InputHandler::BUTTON_NONE)) {
                 display->forceRedraw();
                 suppress_buttons_for_wake = true;
             }
 
             // Clear suppress flag once all buttons are released and no events pending
             if (suppress_buttons_for_wake &&
-                gpio_get(PIN_TRIGGER) && !input->checkBootselButton() &&
-                !trigger_fired && bootsel_event == InputHandler::BUTTON_NONE) {
+                gpio_get(PIN_TRIGGER) && gpio_get(PIN_ENC_ENTER) &&
+                !input->checkBootselButton() &&
+                !trigger_fired && !enc_enter_fired && enc_steps == 0 &&
+                bootsel_event == InputHandler::BUTTON_NONE) {
                 suppress_buttons_for_wake = false;
             }
 
@@ -246,7 +267,27 @@ int main() {
                     printf_g("\n// Trigger detected! Starting flash sequence...\n");
                     buzzer->beepStart();
                     state_machine->startProgramming();
+                } else if (enc_enter_fired) {
+                    printf_g("\n// Encoder button pressed! Starting flash sequence...\n");
+                    settings->save();
+                    buzzer->beepStart();
+                    state_machine->startProgramming();
                 }
+
+#ifdef FIRMWARE_INVENTORY_ENABLED
+                // Encoder turn selects firmware (persisted when programming starts)
+                if (enc_steps != 0 && !enc_enter_fired) {
+                    int idx = state_machine->getCurrentFirmwareIndex();
+                    int dir = (enc_steps > 0) ? 1 : -1;
+                    for (int i = 0; i != enc_steps; i += dir) {
+                        idx = stepFirmwareIndex(idx, dir);
+                    }
+                    state_machine->setCurrentFirmwareIndex(idx);
+                    display->setMenuEntry(state_machine->getCurrentMenuName());
+                    settings->setLastFirmwareIndex(idx);
+                    needs_terminal_redraw = true;
+                }
+#endif
 
                 switch (bootsel_event) {
                     case InputHandler::BUTTON_SHORT_PRESS:
@@ -299,18 +340,9 @@ int main() {
                     int c3 = getchar_timeout_us(10000);
 #ifdef FIRMWARE_INVENTORY_ENABLED
                     if (c3 == 'A' || c3 == 'B') {
-                        int idx = state_machine->getCurrentFirmwareIndex();
-                        if (c3 == 'A') {
-                            // UP: previous entry
-                            if (idx == 0) idx = 9;
-                            else if (idx == 9) idx = firmware_count;
-                            else idx--;
-                        } else {
-                            // DOWN: next entry
-                            if (idx == 9) idx = 0;
-                            else if (idx >= firmware_count) idx = 9;
-                            else idx++;
-                        }
+                        // UP: previous entry, DOWN: next entry
+                        int idx = stepFirmwareIndex(state_machine->getCurrentFirmwareIndex(),
+                                                    (c3 == 'A') ? -1 : 1);
                         state_machine->setCurrentFirmwareIndex(idx);
                         display->setMenuEntry(state_machine->getCurrentMenuName());
                         settings->setLastFirmwareIndex(idx);
@@ -323,6 +355,9 @@ int main() {
                 buzzer->beepStart();
                 state_machine->startProgramming();
             }
+        } else {
+            // Discard encoder turns while busy so they don't apply afterwards
+            input->getEncoderSteps();
         }
 
         // Deferred terminal redraw
