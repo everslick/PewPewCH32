@@ -48,12 +48,14 @@ void InputHandler::init() {
     gpio_set_dir(PIN_TRIGGER, GPIO_IN);
     gpio_pull_up(PIN_TRIGGER);
 
-    // Initialize rotary encoder pins with pull-ups
+    // Initialize rotary encoder pins. The board has external pull-ups and
+    // series resistors (RC filter), internal pull-ups would form a voltage
+    // divider with the series resistors and prevent a valid low level.
     const uint enc_pins[] = { PIN_ENC_ENTER, PIN_ENC_DIR, PIN_ENC_CLK };
     for (uint pin : enc_pins) {
         gpio_init(pin);
         gpio_set_dir(pin, GPIO_IN);
-        gpio_pull_up(pin);
+        gpio_disable_pulls(pin);
     }
 
     // Decode encoder quadrature on every edge of both phases

@@ -29,7 +29,7 @@
 #endif
 
 const int ch32v003_flash_size = 16*1024;
-extern const char* const PROGRAMMER_VERSION = "1.2.0";
+extern const char* const PROGRAMMER_VERSION = "1.4.0";
 
 // Fallback firmware if no external firmware repositories are available
 const uint8_t fallback_firmware[] = {
@@ -72,7 +72,9 @@ void drawTerminalUI() {
 
     printf("//\n");
     printf("// Status: %s  (swio=GPIO%d)\n",
-           StateMachine::getStateName(g_state_machine->getCurrentState()), PIN_SWIO);
+           StateMachine::getStateName(g_state_machine->getCurrentState(),
+                                       g_state_machine->getCurrentFirmwareIndex()),
+           PIN_SWIO);
     printf("//\n");
     printf("//===========================================================\n");
 }
@@ -268,7 +270,9 @@ int main() {
                     buzzer->beepStart();
                     state_machine->startProgramming();
                 } else if (enc_enter_fired) {
-                    printf_g("\n// Encoder button pressed! Starting flash sequence...\n");
+                    printf_g("\n// Encoder button pressed! Executing [%d] %s...\n",
+                             state_machine->getCurrentFirmwareIndex(),
+                             state_machine->getCurrentMenuName());
                     settings->save();
                     buzzer->beepStart();
                     state_machine->startProgramming();

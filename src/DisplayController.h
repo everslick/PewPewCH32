@@ -34,7 +34,7 @@ public:
     void update();
 
     void setMenuEntry(const char* name);
-    void setSystemState(SystemState state);
+    void setSystemState(SystemState state, int menu_index = -1);
     void setFlipped(bool flipped);
     void setSleepTimeout(uint32_t ms);
     void forceRedraw() { wake(); needs_redraw = true; }

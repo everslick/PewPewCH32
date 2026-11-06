@@ -355,19 +355,29 @@ void DisplayController::setMenuEntry(const char* name) {
     needs_redraw = true;
 }
 
-void DisplayController::setSystemState(SystemState state) {
+void DisplayController::setSystemState(SystemState state, int menu_index) {
     wake();
-    snprintf(state_line, sizeof(state_line), "%s", StateMachine::getStateName(state));
+    snprintf(state_line, sizeof(state_line), "%s", StateMachine::getStateName(state, menu_index));
+
+#ifdef FIRMWARE_INVENTORY_ENABLED
+    bool is_wipe = (menu_index == 0);
+    bool is_reboot = (menu_index == 9);
+#else
+    bool is_wipe = false;
+    bool is_reboot = false;
+#endif
 
     switch (state) {
         case STATE_CHECKING_TARGET:
             snprintf(info_line, sizeof(info_line), "Detect target");
             break;
         case STATE_PROGRAMMING:
-            snprintf(info_line, sizeof(info_line), "Don't unplug!");
+            snprintf(info_line, sizeof(info_line), "%s",
+                     is_reboot ? "Reset target" : "Don't unplug!");
             break;
         case STATE_SUCCESS:
-            snprintf(info_line, sizeof(info_line), "Verified OK");
+            snprintf(info_line, sizeof(info_line), "%s",
+                     is_wipe ? "Flash erased" : is_reboot ? "Target running" : "Verified OK");
             break;
         case STATE_ERROR:
             snprintf(info_line, sizeof(info_line), "Check cable!");

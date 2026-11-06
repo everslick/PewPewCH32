@@ -15,8 +15,8 @@
 #define PIN_LED_RED     26
 
 #define PIN_ENC_ENTER   27
-#define PIN_ENC_DIR     28
-#define PIN_ENC_CLK     29
+#define PIN_ENC_CLK     28
+#define PIN_ENC_DIR     29
 
 #endif // _MAIN_H_
 

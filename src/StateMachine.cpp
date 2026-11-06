@@ -78,7 +78,7 @@ void StateMachine::setState(SystemState state) {
 
     // Notify display
     if (display_controller) {
-        display_controller->setSystemState(state);
+        display_controller->setSystemState(state, current_firmware_index);
     }
 }
 
@@ -192,7 +192,16 @@ void StateMachine::cycleFirmware() {
     setState(STATE_CYCLING_FIRMWARE);
 }
 
-const char* StateMachine::getStateName(SystemState state) {
+const char* StateMachine::getStateName(SystemState state, int menu_index) {
+#ifdef FIRMWARE_INVENTORY_ENABLED
+    // WIPE FLASH and REBOOT entries run through STATE_PROGRAMMING as well
+    if (state == STATE_PROGRAMMING) {
+        if (menu_index == 0) return "WIPING...";
+        if (menu_index == 9) return "REBOOTING...";
+    }
+#else
+    (void)menu_index;
+#endif
     switch (state) {
         case STATE_IDLE:             return "READY";
         case STATE_CHECKING_TARGET:  return "CHECKING...";

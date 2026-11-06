@@ -47,7 +47,7 @@ public:
     void setCurrentFirmwareIndex(int index) { current_firmware_index = index; }
     int getCurrentFirmwareIndex() const { return current_firmware_index; }
     const char* getCurrentMenuName() const;
-    static const char* getStateName(SystemState state);
+    static const char* getStateName(SystemState state, int menu_index = -1);
     
 private:
     SystemState current_state;

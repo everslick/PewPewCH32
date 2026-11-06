@@ -47,8 +47,8 @@ PewPewCH32 is designed for developers and manufacturers who need to:
 | GPIO16   | WS2812   | RGB LED status (onboard on Waveshare Pico Zero) |
 | GPIO26   | Red LED  | Error indication, active low (optional) |
 | GPIO27   | Encoder SW | Rotary encoder push button, active low (optional) |
-| GPIO28   | Encoder DT | Rotary encoder phase B (optional) |
-| GPIO29   | Encoder CLK | Rotary encoder phase A (optional) |
+| GPIO28   | Encoder CLK | Rotary encoder phase A (optional) |
+| GPIO29   | Encoder DT | Rotary encoder phase B (optional) |
 
 ## Building
 
@@ -148,8 +148,8 @@ screen /dev/ttyACM0 115200
 - Press to immediately program the selected firmware
 
 **Rotary Encoder (GPIO27-29):**
-- Turn to select the next/previous firmware
-- Press to program the selected firmware
+- Turn to navigate the menu (firmware entries, WIPE FLASH, REBOOT)
+- Press to execute the selected entry (program firmware, wipe or reboot target)
 
 **Serial Controls:**
 
